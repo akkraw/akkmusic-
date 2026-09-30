@@ -13,6 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Номер беты: 0.9.1 … 0.9.9, дальше 0.9.9.1, 0.9.9.2 …
+      # Считается по уже выпущенным бета-релизам, поэтому упавшие сборки номер не съедают.
+      - name: Version
+        run: |
+          n=$(( $(git tag -l 'v0.9.*' | wc -l) + 1 ))
+          if [ "$n" -le 9 ]; then v="0.9.$n"; else v="0.9.9.$((n - 9))"; fi
+          echo "VERSION_NAME=$v" >> "$GITHUB_ENV"
+          echo "Версия: Beta $v"
 
       - uses: actions/setup-java@v5
         with:
@@ -39,11 +50,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="1.${{ github.run_number }}"
-          cp app/build/outputs/apk/release/*.apk "AkkMusic-${VERSION}.apk"
+          VERSION="${VERSION_NAME}"
+          cp app/build/outputs/apk/release/*.apk "AkkMusic-${VERSION}-beta.apk"
           git log -1 --format=%B | grep -v -E "^(Co-Authored-By|Claude-Session):" > notes.md
-          gh release create "v${VERSION}" "AkkMusic-${VERSION}.apk" \
-            --title "AkkMusic ${VERSION}" \
+          gh release create "v${VERSION}" "AkkMusic-${VERSION}-beta.apk" \
+            --title "AkkMusic Beta ${VERSION}" \
             --notes-file notes.md \
             --target "${{ github.sha }}" \
             --latest

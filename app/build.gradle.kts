@@ -11,11 +11,10 @@ android {
         applicationId = "dev.local.player"
         minSdk = 26
         targetSdk = 35
-        // На GitHub номер версии берётся из номера сборки, чтобы каждая
-        // новая версия была «новее» предыдущей для Android.
-        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionCode = build
-        versionName = "1.$build"
+        // На GitHub versionCode = номер сборки (всегда растёт, чтобы обновление
+        // ставилось поверх), а versionName считает сама сборка: Beta 0.9.x.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "dev"
     }
 
     // Один и тот же ключ подписи для всех сборок (и локальных, и на GitHub),

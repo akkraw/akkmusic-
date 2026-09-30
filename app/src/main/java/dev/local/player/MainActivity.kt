@@ -25,7 +25,7 @@ import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backBtn: ImageButton
     private lateinit var screenTitle: TextView
     private lateinit var countText: TextView
-    private lateinit var tabs: MaterialButtonToggleGroup
+    private lateinit var bottomNav: BottomNavigationView
     private lateinit var actionsRow: View
     private lateinit var newPlaylistBtn: Button
     private lateinit var playAllBtn: Button
@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                 screen = Screen.PLAYLISTS
             }
         }
-        tabs.check(if (screen == Screen.TRACKS) R.id.tabTracks else R.id.tabPlaylists)
+        syncBottomNav()
 
         if (hasAudioPermission()) loadLibrary() else requestPermissions()
         render()
@@ -239,11 +239,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun showScreen(s: Screen) {
         screen = s
-        if (s != Screen.PLAYLIST) {
-            tabs.check(if (s == Screen.TRACKS) R.id.tabTracks else R.id.tabPlaylists)
-        }
+        syncBottomNav()
         render()
         list.scrollToPosition(0)
+    }
+
+    /** Подсвечивает нужный пункт нижнего меню (экран плейлиста — это «Плейлисты»). */
+    private fun syncBottomNav() {
+        val navId = if (screen == Screen.TRACKS) R.id.navTracks else R.id.navPlaylists
+        if (bottomNav.selectedItemId != navId) bottomNav.selectedItemId = navId
     }
 
     private fun openPlaylist(id: Long) {
@@ -258,7 +262,6 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         backCallback.isEnabled = screen == Screen.PLAYLIST
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
-        tabs.visibility = if (screen == Screen.PLAYLIST) View.GONE else View.VISIBLE
 
         var emptyMessage: Int? = null
         grantButton.visibility = View.GONE
@@ -450,7 +453,7 @@ class MainActivity : AppCompatActivity() {
         backBtn = findViewById(R.id.backBtn)
         screenTitle = findViewById(R.id.screenTitle)
         countText = findViewById(R.id.countText)
-        tabs = findViewById(R.id.tabs)
+        bottomNav = findViewById(R.id.bottomNav)
         actionsRow = findViewById(R.id.actionsRow)
         newPlaylistBtn = findViewById(R.id.newPlaylistBtn)
         playAllBtn = findViewById(R.id.playAllBtn)
@@ -473,10 +476,18 @@ class MainActivity : AppCompatActivity() {
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
 
-        tabs.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked || screen == Screen.PLAYLIST) return@addOnButtonCheckedListener
-            val target = if (checkedId == R.id.tabTracks) Screen.TRACKS else Screen.PLAYLISTS
-            if (target != screen) showScreen(target)
+        bottomNav.setOnItemSelectedListener { item ->
+            val target = if (item.itemId == R.id.navTracks) Screen.TRACKS else Screen.PLAYLISTS
+            val alreadyThere = target == screen ||
+                (target == Screen.PLAYLISTS && screen == Screen.PLAYLIST)
+            if (!alreadyThere) showScreen(target)
+            true
+        }
+        // Повторный тап по «Плейлисты» внутри плейлиста возвращает к списку
+        bottomNav.setOnItemReselectedListener { item ->
+            if (item.itemId == R.id.navPlaylists && screen == Screen.PLAYLIST) {
+                showScreen(Screen.PLAYLISTS)
+            }
         }
         backBtn.setOnClickListener { showScreen(Screen.PLAYLISTS) }
         grantButton.setOnClickListener { requestPermissions() }

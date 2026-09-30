@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/navTracks"
+        android:icon="@drawable/ic_music"
+        android:title="@string/tab_tracks" />
+    <item
+        android:id="@+id/navPlaylists"
+        android:icon="@drawable/ic_playlist"
+        android:title="@string/tab_playlists" />
+</menu>

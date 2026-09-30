@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="accent">#E0673A</color>
-    <color name="accent_container">#33E0673A</color>
-    <color name="icon_bg">#1E1B18</color>
+    <!-- Нежный небесно-голубой акцент -->
+    <color name="accent">#8CCBF2</color>
+    <color name="on_accent">#0B2A3D</color>
+    <color name="accent_container">#408CCBF2</color>
 </resources>
