@@ -2,7 +2,11 @@ name: Build APK
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -30,7 +34,16 @@ jobs:
           errs=$(grep -E "^e: |error:|What went wrong|AAPT|Could not" -A2 build.log | head -40 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
           echo "::error title=Build errors::${errs}"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AkkMusic-apk
-          path: app/build/outputs/apk/release/*.apk
+      # Публикуем релиз с APK: вкладка Releases на главной странице репозитория
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="1.${{ github.run_number }}"
+          cp app/build/outputs/apk/release/*.apk "AkkMusic-${VERSION}.apk"
+          git log -1 --format=%B > notes.md
+          gh release create "v${VERSION}" "AkkMusic-${VERSION}.apk" \
+            --title "AkkMusic ${VERSION}" \
+            --notes-file notes.md \
+            --target "${{ github.sha }}" \
+            --latest
