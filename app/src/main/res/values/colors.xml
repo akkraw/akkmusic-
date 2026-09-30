@@ -4,4 +4,8 @@
     <color name="accent">#8CCBF2</color>
     <color name="on_accent">#0B2A3D</color>
     <color name="accent_container">#408CCBF2</color>
+    <!-- Шапка, мини-плеер и нижнее меню: чуть темнее основного фона, с голубым оттенком -->
+    <color name="bg">#F7FAFC</color>
+    <color name="panel">#E4ECF2</color>
+    <color name="accent_text">#2F7FB3</color>
 </resources>

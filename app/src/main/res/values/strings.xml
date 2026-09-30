@@ -41,4 +41,9 @@
         <item quantity="many">%d плейлистов</item>
         <item quantity="other">%d плейлиста</item>
     </plurals>
+    <string name="sort">Сортировка</string>
+    <string name="sort_artist">По исполнителю</string>
+    <string name="sort_title_en">По названию: A–Z, затем А–Я</string>
+    <string name="sort_title_ru">По названию: А–Я, затем A–Z</string>
+    <string name="sort_most_played">Часто слушаемые</string>
 </resources>

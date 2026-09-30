@@ -22,6 +22,7 @@ class TrackAdapter(
     var tracks: List<Track> = emptyList()
         private set
     private var currentId: String? = null
+    private var playCounts: Map<Long, Int> = emptyMap()
     private var showHandles = false
 
     @SuppressLint("NotifyDataSetChanged")
@@ -37,6 +38,13 @@ class TrackAdapter(
         list.add(to, list.removeAt(from))
         tracks = list
         notifyItemMoved(from, to)
+    }
+
+    /** Обновляет числа прослушиваний, не меняя порядок списка. */
+    @SuppressLint("NotifyDataSetChanged")
+    fun setPlayCounts(counts: Map<Long, Int>) {
+        playCounts = counts
+        notifyDataSetChanged()
     }
 
     fun setCurrent(mediaId: String?) {
@@ -62,6 +70,7 @@ class TrackAdapter(
         holder.title.text = t.title
         holder.subtitle.text = "${t.artist} · ${t.album}"
         holder.duration.text = formatTime(t.durationMs)
+        holder.plays.text = (playCounts[t.id] ?: 0).toString()
         holder.itemView.isActivated = t.id.toString() == currentId
 
         holder.itemView.setOnClickListener {
@@ -85,6 +94,7 @@ class TrackAdapter(
         val title: TextView = view.findViewById(R.id.trackTitle)
         val subtitle: TextView = view.findViewById(R.id.trackSubtitle)
         val duration: TextView = view.findViewById(R.id.trackDuration)
+        val plays: TextView = view.findViewById(R.id.trackPlays)
         val handle: ImageView = view.findViewById(R.id.dragHandle)
     }
 }

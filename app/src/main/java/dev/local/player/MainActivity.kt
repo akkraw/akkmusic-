@@ -2,6 +2,8 @@ package dev.local.player
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backBtn: ImageButton
     private lateinit var screenTitle: TextView
     private lateinit var countText: TextView
+    private lateinit var sortBtn: ImageButton
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var actionsRow: View
     private lateinit var newPlaylistBtn: Button
@@ -60,6 +63,16 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Данные и состояние экрана ----------
     private lateinit var playlists: PlaylistStore
+    private lateinit var playCounts: PlayCounts
+    private lateinit var uiPrefs: SharedPreferences
+    private var trackSort = TrackSort.ARTIST
+
+    // Сервис засчитал прослушивание — обновляем цифры в списке (порядок не трогаем,
+    // чтобы список не прыгал во время прослушивания)
+    private val countsListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            trackAdapter.setPlayCounts(playCounts.all())
+        }
     private var library: List<Track> = emptyList()
     private var trackById: Map<Long, Track> = emptyMap()
     private var libraryLoaded = false
@@ -150,6 +163,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         playlists = PlaylistStore(applicationContext)
+        playCounts = PlayCounts(applicationContext)
+        uiPrefs = getSharedPreferences("ui", Context.MODE_PRIVATE)
+        trackSort = TrackSort.fromName(uiPrefs.getString(KEY_SORT, null))
         bindViews()
         onBackPressedDispatcher.addCallback(this, backCallback)
 
@@ -184,10 +200,13 @@ class MainActivity : AppCompatActivity() {
             }
         }, MoreExecutors.directExecutor())
         handler.post(progressTick)
+        playCounts.prefs.registerOnSharedPreferenceChangeListener(countsListener)
+        trackAdapter.setPlayCounts(playCounts.all())
     }
 
     override fun onStop() {
         handler.removeCallbacks(progressTick)
+        playCounts.prefs.unregisterOnSharedPreferenceChangeListener(countsListener)
         controller?.removeListener(playerListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
@@ -262,6 +281,9 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         backCallback.isEnabled = screen == Screen.PLAYLIST
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
+        sortBtn.visibility = if (screen == Screen.TRACKS) View.VISIBLE else View.GONE
+        val counts = playCounts.all()
+        trackAdapter.setPlayCounts(counts)
 
         var emptyMessage: Int? = null
         grantButton.visibility = View.GONE
@@ -270,11 +292,12 @@ class MainActivity : AppCompatActivity() {
             Screen.TRACKS -> {
                 screenTitle.setText(R.string.app_name)
                 countText.text = if (libraryLoaded) {
-                    resources.getQuantityString(R.plurals.track_count, library.size, library.size)
+                    resources.getQuantityString(R.plurals.track_count, library.size, library.size) +
+                        " · " + getString(sortLabel(trackSort)).replaceFirstChar { it.lowercase() }
                 } else ""
                 actionsRow.visibility = View.GONE
                 list.adapter = trackAdapter
-                trackAdapter.submit(library)
+                trackAdapter.submit(TrackSorter.sort(library, trackSort, counts))
                 when {
                     !hasAudioPermission() -> {
                         emptyMessage = R.string.need_permission
@@ -322,6 +345,30 @@ class MainActivity : AppCompatActivity() {
             emptyView.visibility = View.GONE
             list.visibility = View.VISIBLE
         }
+    }
+
+    // ---------- Сортировка ----------
+
+    private fun sortLabel(sort: TrackSort): Int = when (sort) {
+        TrackSort.ARTIST -> R.string.sort_artist
+        TrackSort.TITLE_EN_FIRST -> R.string.sort_title_en
+        TrackSort.TITLE_RU_FIRST -> R.string.sort_title_ru
+        TrackSort.MOST_PLAYED -> R.string.sort_most_played
+    }
+
+    private fun chooseSort() {
+        val options = TrackSort.entries
+        val labels = options.map { getString(sortLabel(it)) }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.sort)
+            .setSingleChoiceItems(labels, options.indexOf(trackSort)) { dialog, which ->
+                trackSort = options[which]
+                uiPrefs.edit().putString(KEY_SORT, trackSort.name).apply()
+                dialog.dismiss()
+                render()
+                list.scrollToPosition(0)
+            }
+            .show()
     }
 
     private fun showActions(newPlaylist: Boolean) {
@@ -453,6 +500,7 @@ class MainActivity : AppCompatActivity() {
         backBtn = findViewById(R.id.backBtn)
         screenTitle = findViewById(R.id.screenTitle)
         countText = findViewById(R.id.countText)
+        sortBtn = findViewById(R.id.sortBtn)
         bottomNav = findViewById(R.id.bottomNav)
         actionsRow = findViewById(R.id.actionsRow)
         newPlaylistBtn = findViewById(R.id.newPlaylistBtn)
@@ -490,6 +538,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         backBtn.setOnClickListener { showScreen(Screen.PLAYLISTS) }
+        sortBtn.setOnClickListener { chooseSort() }
         grantButton.setOnClickListener { requestPermissions() }
         newPlaylistBtn.setOnClickListener {
             askName(R.string.new_playlist, "", R.string.create) { name ->
@@ -589,5 +638,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val KEY_SCREEN = "screen"
         private const val KEY_PLAYLIST = "playlist"
+        private const val KEY_SORT = "track_sort"
     }
 }
