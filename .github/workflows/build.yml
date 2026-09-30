@@ -20,5 +20,5 @@ jobs:
           ./gradlew assembleRelease --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: MyPlayer-apk
+          name: AkkMusic-apk
           path: app/build/outputs/apk/release/*.apk

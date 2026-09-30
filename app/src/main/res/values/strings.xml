@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Плеер</string>
-    <string name="library_title">Моя музыка</string>
+    <string name="app_name">AkkMusic</string>
     <string name="need_permission">Чтобы показать твою музыку, приложению нужен доступ к аудиофайлам.</string>
     <string name="no_tracks">Музыка не найдена. Закинь файлы в папку Music на телефоне.</string>
     <string name="grant">Дать доступ</string>
@@ -16,5 +15,30 @@
         <item quantity="few">%d трека</item>
         <item quantity="many">%d треков</item>
         <item quantity="other">%d трека</item>
+    </plurals>
+    <string name="tab_tracks">Треки</string>
+    <string name="tab_playlists">Плейлисты</string>
+    <string name="back">Назад</string>
+    <string name="drag">Перетащить</string>
+    <string name="new_playlist">Новый плейлист</string>
+    <string name="new_playlist_ellipsis">+ Новый плейлист…</string>
+    <string name="playlist_name_hint">Название</string>
+    <string name="create">Создать</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="delete">Удалить</string>
+    <string name="rename">Переименовать</string>
+    <string name="add_to_playlist">Добавить в плейлист</string>
+    <string name="remove_from_playlist">Убрать из плейлиста</string>
+    <string name="added_to">Добавлено в «%s»</string>
+    <string name="already_in">Трек уже есть в «%s»</string>
+    <string name="delete_playlist_q">Удалить плейлист «%s»? Сами файлы останутся на телефоне.</string>
+    <string name="no_playlists">Плейлистов пока нет. Создай первый, а потом зажми любой трек на вкладке «Треки», чтобы добавить его.</string>
+    <string name="playlist_empty">Плейлист пуст. Зажми трек на вкладке «Треки» и выбери «Добавить в плейлист».</string>
+    <plurals name="playlist_count">
+        <item quantity="one">%d плейлист</item>
+        <item quantity="few">%d плейлиста</item>
+        <item quantity="many">%d плейлистов</item>
+        <item quantity="other">%d плейлиста</item>
     </plurals>
 </resources>

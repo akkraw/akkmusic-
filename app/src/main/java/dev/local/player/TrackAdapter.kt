@@ -1,21 +1,42 @@
 package dev.local.player
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
+/**
+ * Список треков. Используется и для всей библиотеки, и для содержимого плейлиста
+ * (там включаются «ручки» для перетаскивания).
+ */
 class TrackAdapter(
     private val onClick: (position: Int) -> Unit,
+    private val onLongClick: (position: Int) -> Unit,
+    private val onStartDrag: (RecyclerView.ViewHolder) -> Unit = {},
 ) : RecyclerView.Adapter<TrackAdapter.Holder>() {
 
-    private var tracks: List<Track> = emptyList()
+    var tracks: List<Track> = emptyList()
+        private set
     private var currentId: String? = null
+    private var showHandles = false
 
-    fun submit(list: List<Track>) {
+    @SuppressLint("NotifyDataSetChanged")
+    fun submit(list: List<Track>, dragHandles: Boolean = false) {
         tracks = list
+        showHandles = dragHandles
         notifyDataSetChanged()
+    }
+
+    /** Перестановка во время перетаскивания (сохранение делает вызывающий код). */
+    fun move(from: Int, to: Int) {
+        val list = tracks.toMutableList()
+        list.add(to, list.removeAt(from))
+        tracks = list
+        notifyItemMoved(from, to)
     }
 
     fun setCurrent(mediaId: String?) {
@@ -35,15 +56,28 @@ class TrackAdapter(
         return Holder(view)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val t = tracks[position]
         holder.title.text = t.title
         holder.subtitle.text = "${t.artist} · ${t.album}"
         holder.duration.text = formatTime(t.durationMs)
         holder.itemView.isActivated = t.id.toString() == currentId
+
         holder.itemView.setOnClickListener {
             val pos = holder.bindingAdapterPosition
             if (pos != RecyclerView.NO_POSITION) onClick(pos)
+        }
+        holder.itemView.setOnLongClickListener {
+            val pos = holder.bindingAdapterPosition
+            if (pos != RecyclerView.NO_POSITION) onLongClick(pos)
+            true
+        }
+
+        holder.handle.visibility = if (showHandles) View.VISIBLE else View.GONE
+        holder.handle.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) onStartDrag(holder)
+            false
         }
     }
 
@@ -51,6 +85,7 @@ class TrackAdapter(
         val title: TextView = view.findViewById(R.id.trackTitle)
         val subtitle: TextView = view.findViewById(R.id.trackSubtitle)
         val duration: TextView = view.findViewById(R.id.trackDuration)
+        val handle: ImageView = view.findViewById(R.id.dragHandle)
     }
 }
 
