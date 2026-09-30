@@ -8,16 +8,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: gradle/actions/setup-gradle@v5
+
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          set -o pipefail
+          ./gradlew assembleRelease 2>&1 | tee build.log
+
+      # Если сборка упала — показываем ошибки компиляции прямо на странице сборки
+      - name: Show errors
+        if: failure()
+        run: |
+          errs=$(grep -E "^e: |error:|What went wrong|AAPT|Could not" -A2 build.log | head -40 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Build errors::${errs}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: AkkMusic-apk

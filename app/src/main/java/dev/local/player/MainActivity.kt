@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity() {
     private var screen = Screen.TRACKS
     private var openPlaylistId: Long = -1
 
-    private val trackAdapter = TrackAdapter(
+    private val trackAdapter: TrackAdapter = TrackAdapter(
         onClick = { pos -> playQueue(trackAdapter.tracks, pos) },
         onLongClick = { pos -> onTrackLongClick(trackAdapter.tracks[pos]) },
         onStartDrag = { holder -> touchHelper.startDrag(holder) },
@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     // Перетаскивание треков внутри плейлиста за «ручку» справа
-    private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
+    private val touchHelper: ItemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
         private var moved = false
 
         override fun isLongPressDragEnabled() = false
