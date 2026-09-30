@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MyPlayer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondaryContainer">@color/accent_container</item>
+    </style>
+
+    <style name="PlayerButton">
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:layout_marginHorizontal">4dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+        <item name="tint">?attr/colorOnSurface</item>
+    </style>
+</resources>

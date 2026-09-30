@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Плеер</string>
+    <string name="library_title">Моя музыка</string>
+    <string name="need_permission">Чтобы показать твою музыку, приложению нужен доступ к аудиофайлам.</string>
+    <string name="no_tracks">Музыка не найдена. Закинь файлы в папку Music на телефоне.</string>
+    <string name="grant">Дать доступ</string>
+    <string name="play">Играть</string>
+    <string name="pause">Пауза</string>
+    <string name="previous">Предыдущий</string>
+    <string name="next">Следующий</string>
+    <string name="shuffle">Перемешать</string>
+    <string name="repeat">Повтор</string>
+    <plurals name="track_count">
+        <item quantity="one">%d трек</item>
+        <item quantity="few">%d трека</item>
+        <item quantity="many">%d треков</item>
+        <item quantity="other">%d трека</item>
+    </plurals>
+</resources>
