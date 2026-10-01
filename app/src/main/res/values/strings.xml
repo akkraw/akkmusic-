@@ -46,4 +46,12 @@
     <string name="sort_title_en">По названию: A–Z, затем А–Я</string>
     <string name="sort_title_ru">По названию: А–Я, затем A–Z</string>
     <string name="sort_most_played">Часто слушаемые</string>
+    <string name="background">Фон</string>
+    <string name="bg_pick">Выбрать картинку</string>
+    <string name="bg_change">Сменить картинку</string>
+    <string name="bg_dim">Затемнение</string>
+    <string name="bg_remove">Убрать фон</string>
+    <string name="bg_hint">Картинка из галереи будет фоном всего приложения. Шапка, плеер и меню затемняются сильнее.</string>
+    <string name="bg_failed">Не удалось открыть картинку</string>
+    <string name="done">Готово</string>
 </resources>

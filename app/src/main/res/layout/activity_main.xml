@@ -1,16 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/appRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/panel"
-    android:fitsSystemWindows="true"
+    android:background="?attr/colorSurface">
+
+    <!-- Пользовательский фон: неподвижная картинка + затемнение -->
+    <ImageView
+        android:id="@+id/bgImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/bgScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone" />
+
+<LinearLayout
+    android:id="@+id/content"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Заголовок -->
+    <!-- Заголовок (отступ сверху под статус-бар задаётся в коде) -->
     <LinearLayout
+        android:id="@+id/headerPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@color/panel"
         android:orientation="vertical"
         android:paddingHorizontal="20dp"
         android:paddingTop="16dp"
@@ -62,10 +85,18 @@
                 style="@style/PlayerButton"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
-                android:layout_marginEnd="-10dp"
                 android:contentDescription="@string/sort"
                 android:src="@drawable/ic_sort"
                 android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/bgBtn"
+                style="@style/PlayerButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="-10dp"
+                android:contentDescription="@string/background"
+                android:src="@drawable/ic_image" />
         </LinearLayout>
 
 
@@ -103,6 +134,7 @@
 
     <!-- Список / пустое состояние -->
     <FrameLayout
+        android:id="@+id/listContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -316,3 +348,4 @@
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
+</FrameLayout>

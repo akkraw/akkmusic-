@@ -9,6 +9,15 @@ import android.content.res.ColorStateList
 import android.view.animation.OvershootInterpolator
 import android.view.animation.PathInterpolator
 import android.widget.ImageView
+import android.graphics.Bitmap
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.slider.Slider
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -47,6 +56,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var screenTitle: TextView
     private lateinit var countText: TextView
     private lateinit var sortBtn: ImageButton
+    private lateinit var bgBtn: ImageButton
+
+    // Фон
+    private lateinit var appRoot: View
+    private lateinit var bgImage: ImageView
+    private lateinit var bgScrim: View
+    private lateinit var headerPanel: View
+    private lateinit var listContainer: View
+    private lateinit var bottomBar: View
+    private var bgSharp: Bitmap? = null
+    private var bgBlur: Bitmap? = null
+    private var panelDrawables: List<BackdropDrawable> = emptyList()
     private lateinit var actionsRow: View
 
     // Нижнее меню
@@ -153,6 +174,21 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var userSeeking = false
 
+    // Системный выбор фото: разрешения на доступ к галерее не нужны
+    private val pickImage =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            ioExecutor.execute {
+                val ok = Backdrop.import(applicationContext, uri)
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    // Пересоздаём экран: с фоном включается тёмный стиль
+                    if (ok) recreate()
+                    else Toast.makeText(this, R.string.bg_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             if (hasAudioPermission()) loadLibrary() else render()
@@ -178,13 +214,31 @@ class MainActivity : AppCompatActivity() {
     // =====================================================================
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // С картинкой на фоне текст всегда светлый — включаем тёмную тему для этого экрана
+        val hasBg = Backdrop.has(this)
+        delegate.localNightMode =
+            if (hasBg) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         super.onCreate(savedInstanceState)
+        if (hasBg) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            )
+        } else {
+            enableEdgeToEdge()
+        }
         setContentView(R.layout.activity_main)
         playlists = PlaylistStore(applicationContext)
         playCounts = PlayCounts(applicationContext)
         uiPrefs = getSharedPreferences("ui", Context.MODE_PRIVATE)
         trackSort = TrackSort.fromName(uiPrefs.getString(KEY_SORT, null))
         bindViews()
+        setupInsets()
+        Backdrop.load(this)?.let { (sharp, blur) ->
+            bgSharp = sharp
+            bgBlur = blur
+        }
+        applyBackground()
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         savedInstanceState?.let {
@@ -382,6 +436,7 @@ class MainActivity : AppCompatActivity() {
         backCallback.isEnabled = screen == Screen.PLAYLIST
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
         sortBtn.visibility = if (screen == Screen.TRACKS) View.VISIBLE else View.GONE
+        bgBtn.visibility = if (screen != Screen.PLAYLIST) View.VISIBLE else View.GONE
         val counts = playCounts.all()
         trackAdapter.setPlayCounts(counts)
 
@@ -444,6 +499,115 @@ class MainActivity : AppCompatActivity() {
         } else {
             emptyView.visibility = View.GONE
             list.visibility = View.VISIBLE
+        }
+    }
+
+    // ---------- Отступы под системные панели ----------
+
+    /** Шапка заходит под статус-бар, нижнее меню — под панель навигации. */
+    private fun setupInsets() {
+        val d = resources.displayMetrics.density
+        val headerTop = headerPanel.paddingTop
+        val headerBottom = headerPanel.paddingBottom
+        val headerSide = headerPanel.paddingLeft
+        val barHeight = (72 * d).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(appRoot) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            headerPanel.setPadding(
+                headerSide + bars.left, headerTop + bars.top,
+                headerSide + bars.right, headerBottom,
+            )
+            bottomBar.setPadding(bars.left, 0, bars.right, bars.bottom)
+            bottomBar.layoutParams.height = barHeight + bars.bottom
+            listContainer.setPadding(bars.left, 0, bars.right, 0)
+            bottomBar.requestLayout()
+            insets
+        }
+    }
+
+    // ---------- Фон ----------
+
+    private fun bgDim(): Int = (uiPrefs.getInt(KEY_BG_DIM, 50) / 5 * 5).coerceIn(0, 90)
+
+    private fun applyBackground() {
+        val sharp = bgSharp
+        val blur = bgBlur
+        val panels = listOf(headerPanel, playerBar, bottomBar)
+        if (sharp == null || blur == null) {
+            bgImage.visibility = View.GONE
+            bgScrim.visibility = View.GONE
+            panelDrawables = emptyList()
+            val panel = ContextCompat.getColor(this, R.color.panel)
+            panels.forEach { it.setBackgroundColor(panel) }
+            listContainer.setBackgroundColor(
+                MaterialColors.getColor(listContainer, com.google.android.material.R.attr.colorSurface)
+            )
+            return
+        }
+        bgImage.setImageBitmap(sharp)
+        bgImage.visibility = View.VISIBLE
+        bgScrim.visibility = View.VISIBLE
+        listContainer.background = null
+        panelDrawables = panels.map { v ->
+            BackdropDrawable(blur, appRoot, v).also { v.background = it }
+        }
+        // Панели могут сдвинуться (появился плеер) — перерисовываем кусок фона под ними
+        appRoot.viewTreeObserver.addOnGlobalLayoutListener {
+            panelDrawables.forEach { it.invalidateSelf() }
+        }
+        updateDim(bgDim())
+    }
+
+    /** Список затемняется на [percent]%, панели — заметно сильнее. */
+    private fun updateDim(percent: Int) {
+        val d = percent / 100f
+        bgScrim.alpha = d
+        val panel = d + (1f - d) * 0.6f
+        val overlay = Color.argb((panel * 255).toInt(), 6, 11, 15)
+        panelDrawables.forEach { it.setOverlay(overlay) }
+    }
+
+    private fun showBackgroundDialog() {
+        val v = layoutInflater.inflate(R.layout.dialog_background, null)
+        val pickBtn = v.findViewById<Button>(R.id.bgPickBtn)
+        val removeBtn = v.findViewById<Button>(R.id.bgRemoveBtn)
+        val dimBlock = v.findViewById<View>(R.id.bgDimBlock)
+        val slider = v.findViewById<Slider>(R.id.bgDimSlider)
+        val hasBg = bgSharp != null
+
+        pickBtn.setText(if (hasBg) R.string.bg_change else R.string.bg_pick)
+        dimBlock.visibility = if (hasBg) View.VISIBLE else View.GONE
+        removeBtn.visibility = if (hasBg) View.VISIBLE else View.GONE
+        slider.value = bgDim().toFloat()
+        slider.setLabelFormatter { "${it.toInt()}%" }
+        // Затемнение меняется вживую, пока двигаешь ползунок
+        slider.addOnChangeListener { _, value, _ -> updateDim(value.toInt()) }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.background)
+            .setView(v)
+            .setPositiveButton(R.string.done, null)
+            .setOnDismissListener {
+                if (hasBg) uiPrefs.edit().putInt(KEY_BG_DIM, slider.value.toInt()).apply()
+            }
+            .show()
+        // Почти не затемняем экран за диалогом, чтобы было видно результат
+        dialog.window?.setDimAmount(0.1f)
+
+        pickBtn.setOnClickListener {
+            dialog.dismiss()
+            pickImage.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+        removeBtn.setOnClickListener {
+            dialog.dismiss()
+            ioExecutor.execute {
+                Backdrop.remove(applicationContext)
+                runOnUiThread { if (!isDestroyed) recreate() }
+            }
         }
     }
 
@@ -594,6 +758,13 @@ class MainActivity : AppCompatActivity() {
         screenTitle = findViewById(R.id.screenTitle)
         countText = findViewById(R.id.countText)
         sortBtn = findViewById(R.id.sortBtn)
+        bgBtn = findViewById(R.id.bgBtn)
+        appRoot = findViewById(R.id.appRoot)
+        bgImage = findViewById(R.id.bgImage)
+        bgScrim = findViewById(R.id.bgScrim)
+        headerPanel = findViewById(R.id.headerPanel)
+        listContainer = findViewById(R.id.listContainer)
+        bottomBar = findViewById(R.id.bottomBar)
         actionsRow = findViewById(R.id.actionsRow)
         navTracks = findViewById(R.id.navTracks)
         navPlaylists = findViewById(R.id.navPlaylists)
@@ -634,6 +805,7 @@ class MainActivity : AppCompatActivity() {
         }
         backBtn.setOnClickListener { showScreen(Screen.PLAYLISTS) }
         sortBtn.setOnClickListener { chooseSort() }
+        bgBtn.setOnClickListener { showBackgroundDialog() }
         grantButton.setOnClickListener { requestPermissions() }
         addPlaylistBtn.setOnClickListener {
             askName(R.string.new_playlist, "", R.string.create) { name ->
@@ -734,5 +906,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SCREEN = "screen"
         private const val KEY_PLAYLIST = "playlist"
         private const val KEY_SORT = "track_sort"
+        private const val KEY_BG_DIM = "bg_dim"
     }
 }
