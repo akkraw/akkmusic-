@@ -20,7 +20,13 @@ jobs:
       # Считается по уже выпущенным бета-релизам, поэтому упавшие сборки номер не съедают.
       - name: Version
         run: |
-          n=$(( $(git tag -l 'v0.9.*' | wc -l) + 1 ))
+          n=$(git tag -l 'v0.9.*' | wc -l)
+          # [amend] в описании коммита — дополнить последний релиз, а не выпускать новый
+          if git log -1 --format=%B | grep -qF '[amend]' && [ "$n" -ge 1 ]; then
+            echo "AMEND=1" >> "$GITHUB_ENV"
+          else
+            n=$((n + 1))
+          fi
           if [ "$n" -le 9 ]; then v="0.9.$n"; else v="0.9.9.$((n - 9))"; fi
           echo "VERSION_NAME=$v" >> "$GITHUB_ENV"
           echo "Версия: Beta $v"
@@ -51,10 +57,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${VERSION_NAME}"
-          cp app/build/outputs/apk/release/*.apk "AkkMusic-${VERSION}-beta.apk"
-          git log -1 --format=%B | grep -v -E "^(Co-Authored-By|Claude-Session):" > notes.md
-          gh release create "v${VERSION}" "AkkMusic-${VERSION}-beta.apk" \
-            --title "AkkMusic Beta ${VERSION}" \
-            --notes-file notes.md \
-            --target "${{ github.sha }}" \
-            --latest
+          APK="AkkMusic-${VERSION}-beta.apk"
+          cp app/build/outputs/apk/release/*.apk "$APK"
+          git log -1 --format=%B | grep -v -E "^(Co-Authored-By|Claude-Session):" | sed 's/\[amend\] *//' > notes.md
+          if [ "${AMEND}" = "1" ]; then
+            # Переносим тег на новый коммит, заменяем APK и дописываем изменения в описание
+            git tag -f "v${VERSION}" "${{ github.sha }}"
+            git push -f origin "v${VERSION}"
+            gh release upload "v${VERSION}" "$APK" --clobber
+            gh release view "v${VERSION}" --json body -q .body > old.md
+            { cat old.md; printf '\n\n---\n**Дополнено:**\n\n'; cat notes.md; } > merged.md
+            gh release edit "v${VERSION}" --notes-file merged.md
+          else
+            gh release create "v${VERSION}" "$APK" \
+              --title "AkkMusic Beta ${VERSION}" \
+              --notes-file notes.md \
+              --target "${{ github.sha }}" \
+              --latest
+          fi
