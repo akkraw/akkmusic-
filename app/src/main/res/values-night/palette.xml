@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Сгенерировано: палитры акцента и текста (тёмная тема) -->
+<resources>
+    <color name="acc_sky_text">#8CCBF2</color>
+    <color name="acc_mint_text">#8EE3C8</color>
+    <color name="acc_lime_text">#C5E478</color>
+    <color name="acc_sun_text">#F2D16B</color>
+    <color name="acc_peach_text">#F5B48A</color>
+    <color name="acc_coral_text">#F28B82</color>
+    <color name="acc_rose_text">#F4A3C8</color>
+    <color name="acc_lilac_text">#C3A6F2</color>
+    <color name="acc_lavender_text">#A7B4F5</color>
+    <color name="acc_silver_text">#D3DCE3</color>
+    <color name="txt_white">#ECEFF1</color>
+    <color name="txt_warm">#F2E8D8</color>
+    <color name="txt_gray">#B9C2C8</color>
+    <color name="txt_blue">#D4EAF7</color>
+    <color name="txt_green">#A8F0B8</color>
+    <color name="txt_amber">#FFCF8A</color>
+    <color name="txt_pink">#F7D0DF</color>
+</resources>

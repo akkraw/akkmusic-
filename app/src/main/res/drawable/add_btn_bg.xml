@@ -3,7 +3,7 @@
     android:color="#33000000">
     <item>
         <shape android:shape="oval">
-            <solid android:color="@color/accent" />
+            <solid android:color="?attr/akkAccent" />
         </shape>
     </item>
 </ripple>

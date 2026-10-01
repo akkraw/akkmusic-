@@ -95,6 +95,66 @@
                 android:text="@string/style_sharp" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
+        <!-- Цвета -->
+        <TextView
+            style="@style/SettingsSection"
+            android:text="@string/settings_colors" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_accent"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/settings_accent_sub"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="-24dp"
+            android:clipToPadding="false"
+            android:paddingHorizontal="20dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/accentRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="10dp" />
+        </HorizontalScrollView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/settings_text_color"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurface" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="-24dp"
+            android:clipToPadding="false"
+            android:paddingHorizontal="20dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/textRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="10dp" />
+        </HorizontalScrollView>
+
         <!-- Фон -->
         <TextView
             style="@style/SettingsSection"

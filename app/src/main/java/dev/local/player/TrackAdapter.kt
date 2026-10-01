@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 
@@ -91,7 +90,7 @@ class TrackAdapter(
         )
         holder.itemView.setPadding(holder.padL, holder.padT, holder.padR, holder.padB)
         holder.title.setTextColor(
-            if (playing) ContextCompat.getColor(holder.title.context, R.color.accent_text)
+            if (playing) MaterialColors.getColor(holder.title, R.attr.akkAccentText)
             else MaterialColors.getColor(holder.title, com.google.android.material.R.attr.colorOnSurface)
         )
 

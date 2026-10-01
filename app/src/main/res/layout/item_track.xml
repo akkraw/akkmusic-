@@ -58,9 +58,9 @@
             android:drawablePadding="2dp"
             android:gravity="center_vertical"
             android:textAppearance="?attr/textAppearanceLabelSmall"
-            android:textColor="@color/accent_text"
+            android:textColor="?attr/akkAccentText"
             app:drawableStartCompat="@drawable/ic_headphones"
-            app:drawableTint="@color/accent_text" />
+            app:drawableTint="?attr/akkAccentText" />
     </LinearLayout>
 
     <ImageView

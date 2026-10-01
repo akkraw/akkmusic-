@@ -62,4 +62,17 @@
     <string name="style_rounded">Скруглённые</string>
     <string name="style_sharp">Острые</string>
     <string name="settings_bg_none">Фон не выбран</string>
+    <string name="search">Поиск</string>
+    <string name="search_hint">Поиск</string>
+    <string name="search_clear">Очистить</string>
+    <string name="search_close">Закрыть поиск</string>
+    <string name="search_empty">Ничего не найдено</string>
+    <string name="search_found">Найдено: %d</string>
+    <string name="cover_pick">Выбрать обложку</string>
+    <string name="cover_change">Сменить обложку</string>
+    <string name="cover_remove">Убрать обложку</string>
+    <string name="settings_colors">Цвета</string>
+    <string name="settings_accent">Акцент</string>
+    <string name="settings_accent_sub">Кнопки, подсветка, ползунки и все цветные детали</string>
+    <string name="settings_text_color">Текст</string>
 </resources>

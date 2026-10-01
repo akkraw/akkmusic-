@@ -65,14 +65,15 @@ object Backdrop {
         tmp.renameTo(target)
     }
 
-    private fun decode(ctx: Context, uri: Uri): Bitmap? {
+    /** Открывает картинку из галереи, уменьшая до [maxSide] по большей стороне. */
+    fun decode(ctx: Context, uri: Uri, maxSide: Int = MAX_SIDE): Bitmap? {
         val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             // ImageDecoder сам учитывает поворот фото (EXIF)
             val source = ImageDecoder.createSource(ctx.contentResolver, uri)
             ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                 val w = info.size.width
                 val h = info.size.height
-                val scale = min(1f, MAX_SIDE.toFloat() / max(w, h))
+                val scale = min(1f, maxSide.toFloat() / max(w, h))
                 decoder.setTargetSize(
                     (w * scale).roundToInt().coerceAtLeast(1),
                     (h * scale).roundToInt().coerceAtLeast(1),
@@ -83,7 +84,7 @@ object Backdrop {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             var sample = 1
-            while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_SIDE) sample *= 2
+            while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
         } ?: return null

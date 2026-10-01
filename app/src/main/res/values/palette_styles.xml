@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Сгенерировано: наложения темы для выбранного акцента и цвета текста -->
+<resources>
+    <style name="ThemeOverlay.AkkMusic.Accent.sky" parent="">
+        <item name="akkAccent">@color/acc_sky</item>
+        <item name="akkOnAccent">@color/acc_sky_on</item>
+        <item name="akkAccentContainer">@color/acc_sky_container</item>
+        <item name="akkAccentText">@color/acc_sky_text</item>
+        <item name="colorPrimary">@color/acc_sky</item>
+        <item name="colorOnPrimary">@color/acc_sky_on</item>
+        <item name="colorPrimaryContainer">@color/acc_sky_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_sky_text</item>
+        <item name="colorSecondary">@color/acc_sky</item>
+        <item name="colorOnSecondary">@color/acc_sky_on</item>
+        <item name="colorSecondaryContainer">@color/acc_sky_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_sky_text</item>
+        <item name="colorTertiary">@color/acc_sky</item>
+        <item name="colorControlActivated">@color/acc_sky</item>
+        <item name="colorAccent">@color/acc_sky</item>
+        <item name="android:colorAccent">@color/acc_sky</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.mint" parent="">
+        <item name="akkAccent">@color/acc_mint</item>
+        <item name="akkOnAccent">@color/acc_mint_on</item>
+        <item name="akkAccentContainer">@color/acc_mint_container</item>
+        <item name="akkAccentText">@color/acc_mint_text</item>
+        <item name="colorPrimary">@color/acc_mint</item>
+        <item name="colorOnPrimary">@color/acc_mint_on</item>
+        <item name="colorPrimaryContainer">@color/acc_mint_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_mint_text</item>
+        <item name="colorSecondary">@color/acc_mint</item>
+        <item name="colorOnSecondary">@color/acc_mint_on</item>
+        <item name="colorSecondaryContainer">@color/acc_mint_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_mint_text</item>
+        <item name="colorTertiary">@color/acc_mint</item>
+        <item name="colorControlActivated">@color/acc_mint</item>
+        <item name="colorAccent">@color/acc_mint</item>
+        <item name="android:colorAccent">@color/acc_mint</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.lime" parent="">
+        <item name="akkAccent">@color/acc_lime</item>
+        <item name="akkOnAccent">@color/acc_lime_on</item>
+        <item name="akkAccentContainer">@color/acc_lime_container</item>
+        <item name="akkAccentText">@color/acc_lime_text</item>
+        <item name="colorPrimary">@color/acc_lime</item>
+        <item name="colorOnPrimary">@color/acc_lime_on</item>
+        <item name="colorPrimaryContainer">@color/acc_lime_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_lime_text</item>
+        <item name="colorSecondary">@color/acc_lime</item>
+        <item name="colorOnSecondary">@color/acc_lime_on</item>
+        <item name="colorSecondaryContainer">@color/acc_lime_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_lime_text</item>
+        <item name="colorTertiary">@color/acc_lime</item>
+        <item name="colorControlActivated">@color/acc_lime</item>
+        <item name="colorAccent">@color/acc_lime</item>
+        <item name="android:colorAccent">@color/acc_lime</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.sun" parent="">
+        <item name="akkAccent">@color/acc_sun</item>
+        <item name="akkOnAccent">@color/acc_sun_on</item>
+        <item name="akkAccentContainer">@color/acc_sun_container</item>
+        <item name="akkAccentText">@color/acc_sun_text</item>
+        <item name="colorPrimary">@color/acc_sun</item>
+        <item name="colorOnPrimary">@color/acc_sun_on</item>
+        <item name="colorPrimaryContainer">@color/acc_sun_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_sun_text</item>
+        <item name="colorSecondary">@color/acc_sun</item>
+        <item name="colorOnSecondary">@color/acc_sun_on</item>
+        <item name="colorSecondaryContainer">@color/acc_sun_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_sun_text</item>
+        <item name="colorTertiary">@color/acc_sun</item>
+        <item name="colorControlActivated">@color/acc_sun</item>
+        <item name="colorAccent">@color/acc_sun</item>
+        <item name="android:colorAccent">@color/acc_sun</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.peach" parent="">
+        <item name="akkAccent">@color/acc_peach</item>
+        <item name="akkOnAccent">@color/acc_peach_on</item>
+        <item name="akkAccentContainer">@color/acc_peach_container</item>
+        <item name="akkAccentText">@color/acc_peach_text</item>
+        <item name="colorPrimary">@color/acc_peach</item>
+        <item name="colorOnPrimary">@color/acc_peach_on</item>
+        <item name="colorPrimaryContainer">@color/acc_peach_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_peach_text</item>
+        <item name="colorSecondary">@color/acc_peach</item>
+        <item name="colorOnSecondary">@color/acc_peach_on</item>
+        <item name="colorSecondaryContainer">@color/acc_peach_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_peach_text</item>
+        <item name="colorTertiary">@color/acc_peach</item>
+        <item name="colorControlActivated">@color/acc_peach</item>
+        <item name="colorAccent">@color/acc_peach</item>
+        <item name="android:colorAccent">@color/acc_peach</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.coral" parent="">
+        <item name="akkAccent">@color/acc_coral</item>
+        <item name="akkOnAccent">@color/acc_coral_on</item>
+        <item name="akkAccentContainer">@color/acc_coral_container</item>
+        <item name="akkAccentText">@color/acc_coral_text</item>
+        <item name="colorPrimary">@color/acc_coral</item>
+        <item name="colorOnPrimary">@color/acc_coral_on</item>
+        <item name="colorPrimaryContainer">@color/acc_coral_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_coral_text</item>
+        <item name="colorSecondary">@color/acc_coral</item>
+        <item name="colorOnSecondary">@color/acc_coral_on</item>
+        <item name="colorSecondaryContainer">@color/acc_coral_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_coral_text</item>
+        <item name="colorTertiary">@color/acc_coral</item>
+        <item name="colorControlActivated">@color/acc_coral</item>
+        <item name="colorAccent">@color/acc_coral</item>
+        <item name="android:colorAccent">@color/acc_coral</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.rose" parent="">
+        <item name="akkAccent">@color/acc_rose</item>
+        <item name="akkOnAccent">@color/acc_rose_on</item>
+        <item name="akkAccentContainer">@color/acc_rose_container</item>
+        <item name="akkAccentText">@color/acc_rose_text</item>
+        <item name="colorPrimary">@color/acc_rose</item>
+        <item name="colorOnPrimary">@color/acc_rose_on</item>
+        <item name="colorPrimaryContainer">@color/acc_rose_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_rose_text</item>
+        <item name="colorSecondary">@color/acc_rose</item>
+        <item name="colorOnSecondary">@color/acc_rose_on</item>
+        <item name="colorSecondaryContainer">@color/acc_rose_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_rose_text</item>
+        <item name="colorTertiary">@color/acc_rose</item>
+        <item name="colorControlActivated">@color/acc_rose</item>
+        <item name="colorAccent">@color/acc_rose</item>
+        <item name="android:colorAccent">@color/acc_rose</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.lilac" parent="">
+        <item name="akkAccent">@color/acc_lilac</item>
+        <item name="akkOnAccent">@color/acc_lilac_on</item>
+        <item name="akkAccentContainer">@color/acc_lilac_container</item>
+        <item name="akkAccentText">@color/acc_lilac_text</item>
+        <item name="colorPrimary">@color/acc_lilac</item>
+        <item name="colorOnPrimary">@color/acc_lilac_on</item>
+        <item name="colorPrimaryContainer">@color/acc_lilac_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_lilac_text</item>
+        <item name="colorSecondary">@color/acc_lilac</item>
+        <item name="colorOnSecondary">@color/acc_lilac_on</item>
+        <item name="colorSecondaryContainer">@color/acc_lilac_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_lilac_text</item>
+        <item name="colorTertiary">@color/acc_lilac</item>
+        <item name="colorControlActivated">@color/acc_lilac</item>
+        <item name="colorAccent">@color/acc_lilac</item>
+        <item name="android:colorAccent">@color/acc_lilac</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.lavender" parent="">
+        <item name="akkAccent">@color/acc_lavender</item>
+        <item name="akkOnAccent">@color/acc_lavender_on</item>
+        <item name="akkAccentContainer">@color/acc_lavender_container</item>
+        <item name="akkAccentText">@color/acc_lavender_text</item>
+        <item name="colorPrimary">@color/acc_lavender</item>
+        <item name="colorOnPrimary">@color/acc_lavender_on</item>
+        <item name="colorPrimaryContainer">@color/acc_lavender_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_lavender_text</item>
+        <item name="colorSecondary">@color/acc_lavender</item>
+        <item name="colorOnSecondary">@color/acc_lavender_on</item>
+        <item name="colorSecondaryContainer">@color/acc_lavender_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_lavender_text</item>
+        <item name="colorTertiary">@color/acc_lavender</item>
+        <item name="colorControlActivated">@color/acc_lavender</item>
+        <item name="colorAccent">@color/acc_lavender</item>
+        <item name="android:colorAccent">@color/acc_lavender</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Accent.silver" parent="">
+        <item name="akkAccent">@color/acc_silver</item>
+        <item name="akkOnAccent">@color/acc_silver_on</item>
+        <item name="akkAccentContainer">@color/acc_silver_container</item>
+        <item name="akkAccentText">@color/acc_silver_text</item>
+        <item name="colorPrimary">@color/acc_silver</item>
+        <item name="colorOnPrimary">@color/acc_silver_on</item>
+        <item name="colorPrimaryContainer">@color/acc_silver_container</item>
+        <item name="colorOnPrimaryContainer">@color/acc_silver_text</item>
+        <item name="colorSecondary">@color/acc_silver</item>
+        <item name="colorOnSecondary">@color/acc_silver_on</item>
+        <item name="colorSecondaryContainer">@color/acc_silver_container</item>
+        <item name="colorOnSecondaryContainer">@color/acc_silver_text</item>
+        <item name="colorTertiary">@color/acc_silver</item>
+        <item name="colorControlActivated">@color/acc_silver</item>
+        <item name="colorAccent">@color/acc_silver</item>
+        <item name="android:colorAccent">@color/acc_silver</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.white" parent="">
+        <item name="colorOnSurface">@color/txt_white</item>
+        <item name="colorOnBackground">@color/txt_white</item>
+        <item name="colorOnSurfaceVariant">@color/txt_white_variant</item>
+        <item name="android:textColorPrimary">@color/txt_white</item>
+        <item name="android:textColorSecondary">@color/txt_white_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.warm" parent="">
+        <item name="colorOnSurface">@color/txt_warm</item>
+        <item name="colorOnBackground">@color/txt_warm</item>
+        <item name="colorOnSurfaceVariant">@color/txt_warm_variant</item>
+        <item name="android:textColorPrimary">@color/txt_warm</item>
+        <item name="android:textColorSecondary">@color/txt_warm_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.gray" parent="">
+        <item name="colorOnSurface">@color/txt_gray</item>
+        <item name="colorOnBackground">@color/txt_gray</item>
+        <item name="colorOnSurfaceVariant">@color/txt_gray_variant</item>
+        <item name="android:textColorPrimary">@color/txt_gray</item>
+        <item name="android:textColorSecondary">@color/txt_gray_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.blue" parent="">
+        <item name="colorOnSurface">@color/txt_blue</item>
+        <item name="colorOnBackground">@color/txt_blue</item>
+        <item name="colorOnSurfaceVariant">@color/txt_blue_variant</item>
+        <item name="android:textColorPrimary">@color/txt_blue</item>
+        <item name="android:textColorSecondary">@color/txt_blue_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.green" parent="">
+        <item name="colorOnSurface">@color/txt_green</item>
+        <item name="colorOnBackground">@color/txt_green</item>
+        <item name="colorOnSurfaceVariant">@color/txt_green_variant</item>
+        <item name="android:textColorPrimary">@color/txt_green</item>
+        <item name="android:textColorSecondary">@color/txt_green_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.amber" parent="">
+        <item name="colorOnSurface">@color/txt_amber</item>
+        <item name="colorOnBackground">@color/txt_amber</item>
+        <item name="colorOnSurfaceVariant">@color/txt_amber_variant</item>
+        <item name="android:textColorPrimary">@color/txt_amber</item>
+        <item name="android:textColorSecondary">@color/txt_amber_variant</item>
+    </style>
+    <style name="ThemeOverlay.AkkMusic.Text.pink" parent="">
+        <item name="colorOnSurface">@color/txt_pink</item>
+        <item name="colorOnBackground">@color/txt_pink</item>
+        <item name="colorOnSurfaceVariant">@color/txt_pink_variant</item>
+        <item name="android:textColorPrimary">@color/txt_pink</item>
+        <item name="android:textColorSecondary">@color/txt_pink_variant</item>
+    </style>
+</resources>

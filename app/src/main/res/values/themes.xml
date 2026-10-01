@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.MyPlayer" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">@color/on_accent</item>
+        <item name="colorPrimary">@color/acc_sky</item>
+        <item name="colorOnPrimary">@color/acc_sky_on</item>
+        <item name="akkAccent">@color/acc_sky</item>
+        <item name="akkOnAccent">@color/acc_sky_on</item>
+        <item name="akkAccentContainer">@color/acc_sky_container</item>
+        <item name="akkAccentText">@color/acc_sky_text</item>
         <item name="colorSurface">@color/bg</item>
         <item name="android:colorBackground">@color/bg</item>
-        <item name="colorSecondaryContainer">@color/accent_container</item>
+        <item name="colorSecondaryContainer">@color/acc_sky_container</item>
         <!-- Моноширинный шрифт JetBrains Mono во всём приложении -->
         <item name="android:fontFamily">@font/app_font</item>
         <item name="fontFamily">@font/app_font</item>
@@ -78,7 +82,22 @@
         <item name="android:layout_marginTop">24dp</item>
         <item name="android:layout_marginBottom">4dp</item>
         <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
-        <item name="android:textColor">@color/accent_text</item>
+        <item name="android:textColor">?attr/akkAccentText</item>
+    </style>
+
+    <!-- Поле ввода поиска: без подчёркивания, в одну строку -->
+    <style name="SearchInput">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@null</item>
+        <item name="android:hint">@string/search_hint</item>
+        <item name="android:imeOptions">actionSearch|flagNoExtractUi</item>
+        <item name="android:inputType">text</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
     </style>
 
     <!-- Типографика -->

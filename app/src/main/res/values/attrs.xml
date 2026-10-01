@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Цвета акцента: меняются выбранной палитрой -->
+    <attr name="akkAccent" format="color" />
+    <attr name="akkOnAccent" format="color" />
+    <attr name="akkAccentContainer" format="color" />
+    <attr name="akkAccentText" format="color" />
+</resources>

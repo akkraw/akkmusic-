@@ -9,6 +9,9 @@ import android.content.res.ColorStateList
 import android.view.animation.OvershootInterpolator
 import android.view.animation.PathInterpolator
 import android.widget.ImageView
+import android.view.Gravity
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.widget.doAfterTextChanged
 import android.widget.LinearLayout
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -69,6 +72,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var countText: TextView
     private lateinit var sortBtn: ImageButton
     private lateinit var sortFab: ImageButton
+    private lateinit var topBar: View
+    private lateinit var searchPill: View
+    private lateinit var searchInput: EditText
+    private lateinit var searchClear: ImageButton
+    private lateinit var searchToggle: ImageButton
+    private lateinit var headerSearch: View
+    private lateinit var headerSearchInput: EditText
+    private lateinit var headerSearchClose: ImageButton
+    private lateinit var titleBlock: View
+    private lateinit var headerCover: ImageView
+
+    // Поиск
+    private var searchQuery = ""
+    private var headerSearchOpen = false
+    private var syncingSearch = false
+
+    // Обложка: для какого плейлиста открыт выбор картинки
+    private var pendingCoverId = -1L
+
+    // Настройки: открыть заново после пересоздания экрана (смена цветов)
+    private var settingsSheet: BottomSheetDialog? = null
+    private var reopenSettings = false
     private lateinit var statusScrim: View
     private lateinit var bottomStack: View
 
@@ -201,6 +226,21 @@ class MainActivity : AppCompatActivity() {
     private var userSeeking = false
 
     // Системный выбор фото: разрешения на доступ к галерее не нужны
+    private val pickCover =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val id = pendingCoverId
+            pendingCoverId = -1
+            if (uri == null || id < 0) return@registerForActivityResult
+            ioExecutor.execute {
+                val ok = PlaylistCovers.save(applicationContext, id, uri)
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    if (ok) render()
+                    else Toast.makeText(this, R.string.bg_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
     private val pickImage =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri == null) return@registerForActivityResult
@@ -234,7 +274,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val backCallback = object : OnBackPressedCallback(false) {
-        override fun handleOnBackPressed() = showScreen(Screen.PLAYLISTS)
+        override fun handleOnBackPressed() {
+            if (searchActive()) closeSearch() else showScreen(Screen.PLAYLISTS)
+        }
     }
 
     // =====================================================================
@@ -245,6 +287,11 @@ class MainActivity : AppCompatActivity() {
         delegate.localNightMode =
             if (hasBg) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         super.onCreate(savedInstanceState)
+        // Цвет акцента и цвет текста — наложения темы, их нужно применить до разметки
+        getSharedPreferences("ui", Context.MODE_PRIVATE).let { pr ->
+            theme.applyStyle(Palette.accent(pr.getString(KEY_ACCENT, null)).styleRes, true)
+            theme.applyStyle(Palette.text(pr.getString(KEY_TEXT, null)).styleRes, true)
+        }
         if (hasBg) {
             enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
@@ -273,6 +320,10 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState?.let {
             screen = Screen.entries[it.getInt(KEY_SCREEN, 0)]
             openPlaylistId = it.getLong(KEY_PLAYLIST, -1)
+            pendingCoverId = it.getLong(KEY_PENDING_COVER, -1)
+            headerSearchOpen = it.getBoolean(KEY_HEADER_SEARCH, false)
+            reopenSettings = it.getBoolean(KEY_SETTINGS_OPEN, false)
+            setQuery(it.getString(KEY_SEARCH, "") ?: "", null, refresh = false)
             if (screen == Screen.PLAYLIST && playlists.get(openPlaylistId) == null) {
                 screen = Screen.PLAYLISTS
             }
@@ -281,12 +332,22 @@ class MainActivity : AppCompatActivity() {
 
         if (hasAudioPermission()) loadLibrary() else requestPermissions()
         render()
+
+        // После смены цвета экран пересоздаётся — возвращаем открытые настройки
+        if (reopenSettings) {
+            reopenSettings = false
+            list.post { if (!isDestroyed) openSettings() }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt(KEY_SCREEN, screen.ordinal)
         outState.putLong(KEY_PLAYLIST, openPlaylistId)
+        outState.putLong(KEY_PENDING_COVER, pendingCoverId)
+        outState.putString(KEY_SEARCH, searchQuery)
+        outState.putBoolean(KEY_HEADER_SEARCH, headerSearchOpen)
+        outState.putBoolean(KEY_SETTINGS_OPEN, reopenSettings || settingsSheet?.isShowing == true)
     }
 
     override fun onStart() {
@@ -358,6 +419,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- Навигация и отрисовка экрана ----------
 
     private fun showScreen(s: Screen) {
+        hideKeyboard()
         screen = s
         syncBottomNav()
         render()
@@ -505,8 +567,9 @@ class MainActivity : AppCompatActivity() {
         playlists.get(openPlaylistId)?.trackIds?.mapNotNull { trackById[it] } ?: emptyList()
 
     private fun render() {
-        backCallback.isEnabled = screen == Screen.PLAYLIST
+        backCallback.isEnabled = screen == Screen.PLAYLIST || searchActive()
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
+        headerCover.visibility = View.GONE
         updateChrome()
         val counts = playCounts.all()
         trackAdapter.setPlayCounts(counts)
@@ -517,19 +580,23 @@ class MainActivity : AppCompatActivity() {
         when (screen) {
             Screen.TRACKS -> {
                 screenTitle.setText(R.string.app_name)
-                countText.text = if (libraryLoaded) {
-                    resources.getQuantityString(R.plurals.track_count, library.size, library.size) +
+                val shown = filterTracks(TrackSorter.sort(library, trackSort, counts), searchQuery)
+                countText.text = when {
+                    !libraryLoaded -> ""
+                    searchQuery.isNotBlank() -> getString(R.string.search_found, shown.size)
+                    else -> resources.getQuantityString(R.plurals.track_count, library.size, library.size) +
                         " · " + getString(sortLabel(trackSort)).replaceFirstChar { it.lowercase() }
-                } else ""
+                }
                 actionsRow.visibility = View.GONE
                 list.adapter = trackAdapter
-                trackAdapter.submit(TrackSorter.sort(library, trackSort, counts))
+                trackAdapter.submit(shown)
                 when {
                     !hasAudioPermission() -> {
                         emptyMessage = R.string.need_permission
                         grantButton.visibility = View.VISIBLE
                     }
                     libraryLoaded && library.isEmpty() -> emptyMessage = R.string.no_tracks
+                    libraryLoaded && shown.isEmpty() -> emptyMessage = R.string.search_empty
                 }
             }
 
@@ -552,6 +619,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 val tracks = openPlaylistTracks()
                 screenTitle.text = p.name
+                if (PlaylistCovers.has(this, p.id)) {
+                    headerCover.visibility = View.VISIBLE
+                    bindCover(headerCover, p.id)
+                }
                 countText.text =
                     resources.getQuantityString(R.plurals.track_count, tracks.size, tracks.size)
                 actionsRow.visibility = View.VISIBLE
@@ -601,6 +672,56 @@ class MainActivity : AppCompatActivity() {
         }
         headerPanel.addOnLayoutChangeListener(relayout)
         bottomStack.addOnLayoutChangeListener(relayout)
+        topBar.addOnLayoutChangeListener(relayout)
+    }
+
+    // ---------- Поиск ----------
+
+    private fun searchActive(): Boolean =
+        screen == Screen.TRACKS && (searchQuery.isNotEmpty() || headerSearchOpen)
+
+    /** Регистр и «ё» не важны; ищем по названию, исполнителю и альбому. */
+    private fun norm(s: String): String = s.lowercase().replace('ё', 'е')
+
+    private fun filterTracks(list: List<Track>, query: String): List<Track> {
+        val q = norm(query.trim())
+        if (q.isEmpty()) return list
+        return list.filter {
+            norm(it.title).contains(q) || norm(it.artist).contains(q) || norm(it.album).contains(q)
+        }
+    }
+
+    /** Одно состояние поиска на два поля (в шапке и в верхней строке). */
+    private fun setQuery(q: String, source: EditText?, refresh: Boolean = true) {
+        searchQuery = q
+        syncingSearch = true
+        for (et in listOf(searchInput, headerSearchInput)) {
+            if (et !== source && et.text.toString() != q) et.setText(q)
+        }
+        syncingSearch = false
+        searchClear.visibility = if (q.isEmpty()) View.GONE else View.VISIBLE
+        if (refresh && screen == Screen.TRACKS) {
+            render()
+            list.scrollToPosition(0)
+        }
+    }
+
+    private fun closeSearch() {
+        headerSearchOpen = false
+        hideKeyboard()
+        searchInput.clearFocus()
+        headerSearchInput.clearFocus()
+        setQuery("", null, refresh = false)
+        render()
+    }
+
+    private fun showKeyboard(v: View) {
+        v.requestFocus()
+        WindowInsetsControllerCompat(window, v).show(WindowInsetsCompat.Type.ime())
+    }
+
+    private fun hideKeyboard() {
+        WindowInsetsControllerCompat(window, list).hide(WindowInsetsCompat.Type.ime())
     }
 
     private fun headerVisible(): Boolean = showHeader || screen == Screen.PLAYLIST
@@ -608,12 +729,17 @@ class MainActivity : AppCompatActivity() {
     /** Что видно сверху: шапка (всегда внутри плейлиста) или маленькая кнопка сортировки. */
     private fun updateChrome() {
         headerPanel.visibility = if (headerVisible()) View.VISIBLE else View.GONE
-        sortBtn.visibility =
-            if (screen == Screen.TRACKS && showHeader) View.VISIBLE else View.GONE
-        sortFab.visibility =
-            if (screen == Screen.TRACKS && !showHeader) View.VISIBLE else View.GONE
+        val onTracks = screen == Screen.TRACKS
+        // С шапкой: лупа слева, по нажатию поле поиска встаёт на место заголовка
+        if (showHeader && searchQuery.isNotEmpty()) headerSearchOpen = true
+        val headerSearching = onTracks && showHeader && headerSearchOpen
+        searchToggle.visibility = if (onTracks && showHeader && !headerSearchOpen) View.VISIBLE else View.GONE
+        headerSearch.visibility = if (headerSearching) View.VISIBLE else View.GONE
+        titleBlock.visibility = if (headerSearching) View.GONE else View.VISIBLE
+        sortBtn.visibility = if (onTracks && showHeader) View.VISIBLE else View.GONE
+        // Без шапки: строка поиска слева и сортировка справа
+        topBar.visibility = if (onTracks && !showHeader) View.VISIBLE else View.GONE
         statusScrim.visibility = if (headerVisible()) View.GONE else View.VISIBLE
-        list.invalidateItemDecorations()
         list.post { updateListPadding() }
     }
 
@@ -633,8 +759,8 @@ class MainActivity : AppCompatActivity() {
             headerPanel.setPadding(dpi(20) + insetL, dpi(12) + insetT, dpi(10) + insetR, dpi(12))
         }
 
-        (sortFab.layoutParams as FrameLayout.LayoutParams).setMargins(
-            0, insetT + dpi(4) + dpi(12), dpi(12) + insetR, 0
+        (topBar.layoutParams as FrameLayout.LayoutParams).setMargins(
+            dpi(12) + insetL, insetT + dpi(4), dpi(12) + insetR, 0
         )
         statusScrim.layoutParams.height = insetT + dpi(24)
 
@@ -656,12 +782,13 @@ class MainActivity : AppCompatActivity() {
 
         val border = if (bgBlur != null || isNight()) 0x14FFFFFF else 0x14000000
         panelDrawables.forEach { d ->
-            d.radius = if (!roundedStyle) 0f else if (d === sortFab.background) dp(22f) else dp(28f)
+            val small = d === sortFab.background || d === searchPill.background
+            d.radius = if (!roundedStyle) 0f else if (small) dp(20f) else dp(28f)
             d.setStroke(border, if (roundedStyle) dp(1f) else 0f)
         }
         trackAdapter.setRounded(roundedStyle)
 
-        listOf(headerPanel, sortFab, bottomStack, playerBar, bottomBar, statusScrim)
+        listOf(headerPanel, topBar, bottomStack, playerBar, bottomBar, statusScrim)
             .forEach { it.requestLayout() }
         list.post { updateListPadding() }
     }
@@ -671,6 +798,7 @@ class MainActivity : AppCompatActivity() {
         val gap = if (roundedStyle) dpi(4) else 0
         val top = when {
             headerPanel.visibility == View.VISIBLE -> headerPanel.bottom + gap
+            topBar.visibility == View.VISIBLE -> topBar.bottom + dpi(4)
             else -> insetT + dpi(4)
         }
         val bottom = (appRoot.height - bottomStack.top).coerceAtLeast(0) + gap
@@ -694,7 +822,7 @@ class MainActivity : AppCompatActivity() {
             bgImage.visibility = View.GONE
             bgScrim.visibility = View.GONE
         }
-        panelDrawables = listOf(headerPanel, playerBar, bottomBar, sortFab).map { v ->
+        panelDrawables = listOf(headerPanel, playerBar, bottomBar, searchPill, sortFab).map { v ->
             PanelDrawable(if (hasBg) blur else null, appRoot, v).also { v.background = it }
         }
         // Панели могут сдвинуться (появился плеер) — перерисовываем кусок фона под ними
@@ -759,6 +887,22 @@ class MainActivity : AppCompatActivity() {
             applyStyle()
         }
 
+        // Цвета: применяются пересозданием экрана, настройки откроются снова
+        fillSwatches(
+            v.findViewById(R.id.accentRow), Palette.accents,
+            Palette.accent(uiPrefs.getString(KEY_ACCENT, null)).key,
+        ) { key ->
+            uiPrefs.edit().putString(KEY_ACCENT, key).apply()
+            restartForColors()
+        }
+        fillSwatches(
+            v.findViewById(R.id.textRow), Palette.texts,
+            Palette.text(uiPrefs.getString(KEY_TEXT, null)).key,
+        ) { key ->
+            uiPrefs.edit().putString(KEY_TEXT, key).apply()
+            restartForColors()
+        }
+
         // Фон
         bgHint.visibility = if (hasBg) View.GONE else View.VISIBLE
         pickBtn.setText(if (hasBg) R.string.bg_change else R.string.bg_pick)
@@ -769,6 +913,7 @@ class MainActivity : AppCompatActivity() {
         slider.addOnChangeListener { _, value, _ -> updateDim(value.toInt()) }
 
         val sheet = BottomSheetDialog(this)
+        settingsSheet = sheet
         sheet.setContentView(v)
         sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         sheet.behavior.skipCollapsed = true
@@ -783,6 +928,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         sheet.setOnDismissListener {
+            if (settingsSheet === sheet) settingsSheet = null
             if (hasBg) uiPrefs.edit().putInt(KEY_BG_DIM, slider.value.toInt()).apply()
         }
         sheet.show()
@@ -800,6 +946,44 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { if (!isDestroyed) recreate() }
             }
         }
+    }
+
+    /** Ряд цветных кружков; выбранный обведён кольцом. */
+    private fun fillSwatches(
+        row: LinearLayout, items: List<Palette.Swatch>, selected: String, onPick: (String) -> Unit,
+    ) {
+        val size = dpi(36)
+        val ring = MaterialColors.getColor(row, com.google.android.material.R.attr.colorOnSurface)
+        val edge = if (isNight()) 0x33FFFFFF else 0x33000000
+        items.forEach { sw ->
+            val cell = FrameLayout(this)
+            val dot = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(ContextCompat.getColor(this@MainActivity, sw.colorRes))
+                    setStroke(dpi(1), edge)
+                }
+            }
+            cell.addView(dot, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+            if (sw.key == selected) {
+                cell.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setStroke(dpi(2), ring)
+                }
+            }
+            cell.contentDescription = sw.label
+            cell.tooltipText = sw.label
+            cell.setOnClickListener { if (sw.key != selected) onPick(sw.key) }
+            row.addView(cell, LinearLayout.LayoutParams(size + dpi(10), size + dpi(10)).apply {
+                marginEnd = dpi(4)
+            })
+        }
+    }
+
+    private fun restartForColors() {
+        reopenSettings = true
+        settingsSheet?.dismiss()
+        recreate()
     }
 
     // ---------- Сортировка ----------
@@ -877,25 +1061,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPlaylistLongClick(p: Playlist) {
-        val options = arrayOf(getString(R.string.rename), getString(R.string.delete))
+        val hasCover = PlaylistCovers.has(this, p.id)
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += getString(R.string.rename) to {
+            askName(R.string.rename, p.name, R.string.save) { name ->
+                playlists.rename(p.id, name)
+                render()
+            }
+        }
+        actions += getString(if (hasCover) R.string.cover_change else R.string.cover_pick) to {
+            pendingCoverId = p.id
+            pickCover.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+        if (hasCover) {
+            actions += getString(R.string.cover_remove) to {
+                PlaylistCovers.remove(this, p.id)
+                render()
+            }
+        }
+        actions += getString(R.string.delete) to {
+            MaterialAlertDialogBuilder(this)
+                .setMessage(getString(R.string.delete_playlist_q, p.name))
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.delete) { _, _ ->
+                    playlists.delete(p.id)
+                    PlaylistCovers.remove(this, p.id)
+                    render()
+                }
+                .show()
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(p.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> askName(R.string.rename, p.name, R.string.save) { name ->
-                        playlists.rename(p.id, name)
-                        render()
-                    }
-                    1 -> MaterialAlertDialogBuilder(this)
-                        .setMessage(getString(R.string.delete_playlist_q, p.name))
-                        .setNegativeButton(R.string.cancel, null)
-                        .setPositiveButton(R.string.delete) { _, _ ->
-                            playlists.delete(p.id)
-                            render()
-                        }
-                        .show()
-                }
-            }
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
             .show()
     }
 
@@ -950,6 +1147,16 @@ class MainActivity : AppCompatActivity() {
         countText = findViewById(R.id.countText)
         sortBtn = findViewById(R.id.sortBtn)
         sortFab = findViewById(R.id.sortFab)
+        topBar = findViewById(R.id.topBar)
+        searchPill = findViewById(R.id.searchPill)
+        searchInput = findViewById(R.id.searchInput)
+        searchClear = findViewById(R.id.searchClear)
+        searchToggle = findViewById(R.id.searchToggle)
+        headerSearch = findViewById(R.id.headerSearch)
+        headerSearchInput = findViewById(R.id.headerSearchInput)
+        headerSearchClose = findViewById(R.id.headerSearchClose)
+        titleBlock = findViewById(R.id.titleBlock)
+        headerCover = findViewById(R.id.headerCover)
         statusScrim = findViewById(R.id.statusScrim)
         bottomStack = findViewById(R.id.bottomStack)
         appRoot = findViewById(R.id.appRoot)
@@ -988,18 +1195,22 @@ class MainActivity : AppCompatActivity() {
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
-        list.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(
-                outRect: android.graphics.Rect, view: View,
-                parent: RecyclerView, state: RecyclerView.State,
-            ) {
-                // Без шапки в правом верхнем углу кнопка сортировки: первая строка
-                // заканчивается перед ней, а не прячет под ней время трека
-                if (sortFab.visibility == View.VISIBLE &&
-                    parent.getChildAdapterPosition(view) == 0
-                ) {
-                    outRect.right = dpi(48)
-                }
+        // Поиск
+        for (et in listOf(searchInput, headerSearchInput)) {
+            et.doAfterTextChanged { if (!syncingSearch) setQuery(it?.toString() ?: "", et) }
+            et.setOnEditorActionListener { _, _, _ -> hideKeyboard(); true }
+        }
+        searchClear.setOnClickListener { setQuery("", null) }
+        searchToggle.setOnClickListener {
+            headerSearchOpen = true
+            render()
+            showKeyboard(headerSearchInput)
+        }
+        headerSearchClose.setOnClickListener { closeSearch() }
+        // Начал листать — клавиатура не нужна
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) hideKeyboard()
             }
         })
 
@@ -1121,5 +1332,11 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_BG_DIM = "bg_dim"
         private const val KEY_HEADER = "show_header"
         private const val KEY_ROUNDED = "rounded_style"
+        private const val KEY_ACCENT = "accent"
+        private const val KEY_TEXT = "text_color"
+        private const val KEY_SEARCH = "search"
+        private const val KEY_HEADER_SEARCH = "header_search"
+        private const val KEY_PENDING_COVER = "pending_cover"
+        private const val KEY_SETTINGS_OPEN = "settings_open"
     }
 }
