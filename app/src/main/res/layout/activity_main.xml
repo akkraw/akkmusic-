@@ -79,14 +79,6 @@
             android:visibility="gone">
 
             <Button
-                android:id="@+id/newPlaylistBtn"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/new_playlist"
-                app:icon="@drawable/ic_add" />
-
-            <Button
                 android:id="@+id/playAllBtn"
                 style="@style/Widget.Material3.Button"
                 android:layout_width="0dp"
@@ -250,12 +242,77 @@
         </LinearLayout>
     </LinearLayout>
     <!-- Нижнее меню: треки / плейлисты -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNav"
+    <LinearLayout
+        android:id="@+id/bottomBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:backgroundTint="@color/panel"
-        app:elevation="0dp"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/bottom_nav" />
+        android:layout_height="72dp"
+        android:background="@color/panel"
+        android:clipChildren="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/navTracks"
+            style="@style/NavItem">
+
+            <FrameLayout style="@style/NavIconBox">
+
+                <View
+                    android:id="@+id/navTracksPill"
+                    style="@style/NavPill" />
+
+                <ImageView
+                    android:id="@+id/navTracksIcon"
+                    style="@style/NavIcon"
+                    android:src="@drawable/ic_music" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/navTracksLabel"
+                style="@style/NavLabel"
+                android:text="@string/tab_tracks" />
+        </LinearLayout>
+
+        <!-- Слот под кнопку «+»: ширина анимируется от 0, раздвигая пункты меню -->
+        <FrameLayout
+            android:id="@+id/addSlot"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/addPlaylistBtn"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="center"
+                android:background="@drawable/add_btn_bg"
+                android:contentDescription="@string/new_playlist"
+                android:elevation="2dp"
+                android:scaleType="center"
+                android:src="@drawable/ic_add"
+                app:tint="@color/on_accent" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/navPlaylists"
+            style="@style/NavItem">
+
+            <FrameLayout style="@style/NavIconBox">
+
+                <View
+                    android:id="@+id/navPlaylistsPill"
+                    style="@style/NavPill" />
+
+                <ImageView
+                    android:id="@+id/navPlaylistsIcon"
+                    style="@style/NavIcon"
+                    android:src="@drawable/ic_playlist" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/navPlaylistsLabel"
+                style="@style/NavLabel"
+                android:text="@string/tab_playlists" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

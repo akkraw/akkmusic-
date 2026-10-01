@@ -4,6 +4,11 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.animation.ValueAnimator
+import android.content.res.ColorStateList
+import android.view.animation.OvershootInterpolator
+import android.view.animation.PathInterpolator
+import android.widget.ImageView
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -27,7 +32,7 @@ import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -42,9 +47,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var screenTitle: TextView
     private lateinit var countText: TextView
     private lateinit var sortBtn: ImageButton
-    private lateinit var bottomNav: BottomNavigationView
     private lateinit var actionsRow: View
-    private lateinit var newPlaylistBtn: Button
+
+    // Нижнее меню
+    private lateinit var navTracks: View
+    private lateinit var navPlaylists: View
+    private lateinit var navTracksPill: View
+    private lateinit var navPlaylistsPill: View
+    private lateinit var navTracksIcon: ImageView
+    private lateinit var navPlaylistsIcon: ImageView
+    private lateinit var navTracksLabel: TextView
+    private lateinit var navPlaylistsLabel: TextView
+    private lateinit var addSlot: View
+    private lateinit var addPlaylistBtn: ImageButton
+    private var addShown: Boolean? = null
+    private var slotAnimator: ValueAnimator? = null
+    private val easing = PathInterpolator(0.2f, 0f, 0f, 1f)
     private lateinit var playAllBtn: Button
     private lateinit var shuffleAllBtn: Button
     private lateinit var list: RecyclerView
@@ -176,7 +194,7 @@ class MainActivity : AppCompatActivity() {
                 screen = Screen.PLAYLISTS
             }
         }
-        syncBottomNav()
+        syncBottomNav(animate = false)
 
         if (hasAudioPermission()) loadLibrary() else requestPermissions()
         render()
@@ -261,12 +279,94 @@ class MainActivity : AppCompatActivity() {
         syncBottomNav()
         render()
         list.scrollToPosition(0)
+        // Лёгкое появление содержимого при смене экрана
+        for (v in listOf(list, emptyView)) {
+            v.alpha = 0f
+            v.animate().alpha(1f).setDuration(180).setInterpolator(easing).start()
+        }
     }
 
-    /** Подсвечивает нужный пункт нижнего меню (экран плейлиста — это «Плейлисты»). */
-    private fun syncBottomNav() {
-        val navId = if (screen == Screen.TRACKS) R.id.navTracks else R.id.navPlaylists
-        if (bottomNav.selectedItemId != navId) bottomNav.selectedItemId = navId
+    // ---------- Нижнее меню ----------
+
+    /**
+     * Подсвечивает нужный пункт (экран плейлиста относится к «Плейлистам»)
+     * и показывает «+» между пунктами только на списке плейлистов.
+     */
+    private fun syncBottomNav(animate: Boolean = true) {
+        val onTracks = screen == Screen.TRACKS
+        setNavSelected(navTracksPill, navTracksIcon, navTracksLabel, onTracks, animate)
+        setNavSelected(navPlaylistsPill, navPlaylistsIcon, navPlaylistsLabel, !onTracks, animate)
+        setAddButtonVisible(screen == Screen.PLAYLISTS, animate)
+    }
+
+    private fun setNavSelected(
+        pill: View, icon: ImageView, label: TextView, selected: Boolean, animate: Boolean,
+    ) {
+        val color = MaterialColors.getColor(
+            label,
+            if (selected) com.google.android.material.R.attr.colorOnSurface
+            else com.google.android.material.R.attr.colorOnSurfaceVariant
+        )
+        icon.imageTintList = ColorStateList.valueOf(color)
+        label.setTextColor(color)
+
+        val alpha = if (selected) 1f else 0f
+        val scale = if (selected) 1f else 0.5f
+        pill.animate().cancel()
+        if (animate) {
+            pill.animate().alpha(alpha).scaleX(scale)
+                .setDuration(220).setInterpolator(easing).start()
+        } else {
+            pill.alpha = alpha
+            pill.scaleX = scale
+        }
+    }
+
+    /** «+» выезжает между пунктами: слот расширяется, кнопка вырастает с поворотом. */
+    private fun setAddButtonVisible(show: Boolean, animate: Boolean) {
+        if (addShown == show) return
+        addShown = show
+        addPlaylistBtn.isEnabled = show
+
+        val targetWidth = if (show) (72 * resources.displayMetrics.density).toInt() else 0
+        slotAnimator?.cancel()
+        addPlaylistBtn.animate().cancel()
+
+        if (!animate) {
+            addSlot.layoutParams.width = targetWidth
+            addSlot.requestLayout()
+            val v = if (show) 1f else 0f
+            addPlaylistBtn.scaleX = v
+            addPlaylistBtn.scaleY = v
+            addPlaylistBtn.alpha = v
+            addPlaylistBtn.rotation = 0f
+            return
+        }
+
+        slotAnimator = ValueAnimator.ofInt(addSlot.layoutParams.width, targetWidth).apply {
+            duration = if (show) 280 else 220
+            interpolator = easing
+            addUpdateListener {
+                addSlot.layoutParams.width = it.animatedValue as Int
+                addSlot.requestLayout()
+            }
+            start()
+        }
+
+        if (show) {
+            if (addPlaylistBtn.scaleX < 0.05f) addPlaylistBtn.rotation = -90f
+            addPlaylistBtn.animate()
+                .scaleX(1f).scaleY(1f).alpha(1f).rotation(0f)
+                .setStartDelay(60).setDuration(280)
+                .setInterpolator(OvershootInterpolator(1.5f))
+                .start()
+        } else {
+            addPlaylistBtn.animate()
+                .scaleX(0f).scaleY(0f).alpha(0f).rotation(-90f)
+                .setStartDelay(0).setDuration(180)
+                .setInterpolator(easing)
+                .start()
+        }
     }
 
     private fun openPlaylist(id: Long) {
@@ -312,7 +412,7 @@ class MainActivity : AppCompatActivity() {
                 screenTitle.setText(R.string.app_name)
                 countText.text =
                     resources.getQuantityString(R.plurals.playlist_count, all.size, all.size)
-                showActions(newPlaylist = true)
+                actionsRow.visibility = View.GONE
                 list.adapter = playlistAdapter
                 playlistAdapter.submit(all)
                 if (all.isEmpty()) emptyMessage = R.string.no_playlists
@@ -328,7 +428,7 @@ class MainActivity : AppCompatActivity() {
                 screenTitle.text = p.name
                 countText.text =
                     resources.getQuantityString(R.plurals.track_count, tracks.size, tracks.size)
-                showActions(newPlaylist = false)
+                actionsRow.visibility = View.VISIBLE
                 playAllBtn.isEnabled = tracks.isNotEmpty()
                 shuffleAllBtn.isEnabled = tracks.isNotEmpty()
                 list.adapter = trackAdapter
@@ -369,13 +469,6 @@ class MainActivity : AppCompatActivity() {
                 list.scrollToPosition(0)
             }
             .show()
-    }
-
-    private fun showActions(newPlaylist: Boolean) {
-        actionsRow.visibility = View.VISIBLE
-        newPlaylistBtn.visibility = if (newPlaylist) View.VISIBLE else View.GONE
-        playAllBtn.visibility = if (newPlaylist) View.GONE else View.VISIBLE
-        shuffleAllBtn.visibility = if (newPlaylist) View.GONE else View.VISIBLE
     }
 
     // ---------- Плейлисты: действия ----------
@@ -501,9 +594,17 @@ class MainActivity : AppCompatActivity() {
         screenTitle = findViewById(R.id.screenTitle)
         countText = findViewById(R.id.countText)
         sortBtn = findViewById(R.id.sortBtn)
-        bottomNav = findViewById(R.id.bottomNav)
         actionsRow = findViewById(R.id.actionsRow)
-        newPlaylistBtn = findViewById(R.id.newPlaylistBtn)
+        navTracks = findViewById(R.id.navTracks)
+        navPlaylists = findViewById(R.id.navPlaylists)
+        navTracksPill = findViewById(R.id.navTracksPill)
+        navPlaylistsPill = findViewById(R.id.navPlaylistsPill)
+        navTracksIcon = findViewById(R.id.navTracksIcon)
+        navPlaylistsIcon = findViewById(R.id.navPlaylistsIcon)
+        navTracksLabel = findViewById(R.id.navTracksLabel)
+        navPlaylistsLabel = findViewById(R.id.navPlaylistsLabel)
+        addSlot = findViewById(R.id.addSlot)
+        addPlaylistBtn = findViewById(R.id.addPlaylistBtn)
         playAllBtn = findViewById(R.id.playAllBtn)
         shuffleAllBtn = findViewById(R.id.shuffleAllBtn)
         list = findViewById(R.id.trackList)
@@ -524,23 +625,17 @@ class MainActivity : AppCompatActivity() {
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
 
-        bottomNav.setOnItemSelectedListener { item ->
-            val target = if (item.itemId == R.id.navTracks) Screen.TRACKS else Screen.PLAYLISTS
-            val alreadyThere = target == screen ||
-                (target == Screen.PLAYLISTS && screen == Screen.PLAYLIST)
-            if (!alreadyThere) showScreen(target)
-            true
+        navTracks.setOnClickListener {
+            if (screen != Screen.TRACKS) showScreen(Screen.TRACKS)
         }
-        // Повторный тап по «Плейлисты» внутри плейлиста возвращает к списку
-        bottomNav.setOnItemReselectedListener { item ->
-            if (item.itemId == R.id.navPlaylists && screen == Screen.PLAYLIST) {
-                showScreen(Screen.PLAYLISTS)
-            }
+        // Из открытого плейлиста тап по «Плейлистам» возвращает к списку
+        navPlaylists.setOnClickListener {
+            if (screen != Screen.PLAYLISTS) showScreen(Screen.PLAYLISTS)
         }
         backBtn.setOnClickListener { showScreen(Screen.PLAYLISTS) }
         sortBtn.setOnClickListener { chooseSort() }
         grantButton.setOnClickListener { requestPermissions() }
-        newPlaylistBtn.setOnClickListener {
+        addPlaylistBtn.setOnClickListener {
             askName(R.string.new_playlist, "", R.string.create) { name ->
                 playlists.create(name)
                 render()

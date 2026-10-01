@@ -33,7 +33,7 @@
     <string name="added_to">Добавлено в «%s»</string>
     <string name="already_in">Трек уже есть в «%s»</string>
     <string name="delete_playlist_q">Удалить плейлист «%s»? Сами файлы останутся на телефоне.</string>
-    <string name="no_playlists">Плейлистов пока нет. Создай первый, а потом зажми любой трек на вкладке «Треки», чтобы добавить его.</string>
+    <string name="no_playlists">Плейлистов пока нет. Нажми «+» внизу, чтобы создать первый, а потом зажми любой трек на вкладке «Треки», чтобы добавить его.</string>
     <string name="playlist_empty">Плейлист пуст. Зажми трек на вкладке «Треки» и выбери «Добавить в плейлист».</string>
     <plurals name="playlist_count">
         <item quantity="one">%d плейлист</item>
