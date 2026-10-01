@@ -54,4 +54,12 @@
     <string name="bg_hint">Картинка из галереи будет фоном всего приложения. Шапка, плеер и меню затемняются сильнее.</string>
     <string name="bg_failed">Не удалось открыть картинку</string>
     <string name="done">Готово</string>
+    <string name="settings">Настройки</string>
+    <string name="settings_interface">Интерфейс</string>
+    <string name="settings_header">Верхняя панель</string>
+    <string name="settings_header_sub">Заголовок и число треков. Без неё кнопка сортировки переедет в угол.</string>
+    <string name="settings_corners">Углы панелей</string>
+    <string name="style_rounded">Скруглённые</string>
+    <string name="style_sharp">Острые</string>
+    <string name="settings_bg_none">Фон не выбран</string>
 </resources>

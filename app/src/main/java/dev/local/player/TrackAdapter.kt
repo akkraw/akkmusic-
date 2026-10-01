@@ -7,7 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.color.MaterialColors
 
 /**
  * Список треков. Используется и для всей библиотеки, и для содержимого плейлиста
@@ -24,6 +26,15 @@ class TrackAdapter(
     private var currentId: String? = null
     private var playCounts: Map<Long, Int> = emptyMap()
     private var showHandles = false
+    private var rounded = true
+
+    /** Скруглённая плашка с отступами или прямая полоса во всю ширину. */
+    @SuppressLint("NotifyDataSetChanged")
+    fun setRounded(value: Boolean) {
+        if (rounded == value) return
+        rounded = value
+        notifyDataSetChanged()
+    }
 
     @SuppressLint("NotifyDataSetChanged")
     fun submit(list: List<Track>, dragHandles: Boolean = false) {
@@ -71,7 +82,15 @@ class TrackAdapter(
         holder.subtitle.text = "${t.artist} · ${t.album}"
         holder.duration.text = formatTime(t.durationMs)
         holder.plays.text = (playCounts[t.id] ?: 0).toString()
-        holder.itemView.isActivated = t.id.toString() == currentId
+        val playing = t.id.toString() == currentId
+        holder.itemView.isActivated = playing
+        holder.itemView.setBackgroundResource(
+            if (rounded) R.drawable.item_bg_rounded else R.drawable.item_bg
+        )
+        holder.title.setTextColor(
+            if (playing) ContextCompat.getColor(holder.title.context, R.color.accent_text)
+            else MaterialColors.getColor(holder.title, com.google.android.material.R.attr.colorOnSurface)
+        )
 
         holder.itemView.setOnClickListener {
             val pos = holder.bindingAdapterPosition

@@ -137,52 +137,82 @@ object Backdrop {
 }
 
 /**
- * Фон панели: кусок размытой картинки ровно под панелью (совпадает с фоном
- * за ней) + полупрозрачное затемнение поверх. Выглядит как матовое стекло.
+ * Фон панели. Два режима:
+ *  - с картинкой: кусок размытой картинки ровно под панелью + затемнение (матовое стекло);
+ *  - без картинки: просто сплошной цвет.
+ * В скруглённом стиле обрезается по скруглённому прямоугольнику и получает тонкую обводку.
  */
-class BackdropDrawable(
-    private val blurred: Bitmap,
+class PanelDrawable(
+    private val blurred: Bitmap?,
     private val root: View,
     private val host: View,
 ) : Drawable() {
 
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-    private val overlayPaint = Paint()
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val matrix = Matrix()
     private val hostLoc = IntArray(2)
     private val rootLoc = IntArray(2)
+    private val rect = android.graphics.RectF()
+    private val clip = android.graphics.Path()
 
-    fun setOverlay(color: Int) {
-        overlayPaint.color = color
+    var radius = 0f
+        set(v) { field = v; invalidateSelf() }
+
+    /** Цвет поверх размытой картинки или сплошной цвет, если картинки нет. */
+    fun setFill(color: Int) {
+        fillPaint.color = color
+        invalidateSelf()
+    }
+
+    fun setStroke(color: Int, widthPx: Float) {
+        strokePaint.color = color
+        strokePaint.strokeWidth = widthPx
         invalidateSelf()
     }
 
     override fun draw(canvas: Canvas) {
+        rect.set(bounds)
+        canvas.save()
+        if (radius > 0f) {
+            clip.reset()
+            clip.addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW)
+            canvas.clipPath(clip)
+        } else {
+            canvas.clipRect(bounds)
+        }
+
+        val bmp = blurred
         val rw = root.width.toFloat()
         val rh = root.height.toFloat()
-        if (rw <= 0f || rh <= 0f) return
-        host.getLocationInWindow(hostLoc)
-        root.getLocationInWindow(rootLoc)
-        val dx = (hostLoc[0] - rootLoc[0]).toFloat()
-        val dy = (hostLoc[1] - rootLoc[1]).toFloat()
-
-        // Тот же centerCrop, что и у картинки на весь экран, сдвинутый к позиции панели
-        val bw = blurred.width.toFloat()
-        val bh = blurred.height.toFloat()
-        val scale = max(rw / bw, rh / bh)
-        matrix.setScale(scale, scale)
-        matrix.postTranslate((rw - bw * scale) / 2f - dx, (rh - bh * scale) / 2f - dy)
-
-        canvas.save()
-        canvas.clipRect(bounds)
-        canvas.drawBitmap(blurred, matrix, bitmapPaint)
+        if (bmp != null && rw > 0f && rh > 0f) {
+            host.getLocationInWindow(hostLoc)
+            root.getLocationInWindow(rootLoc)
+            // Тот же centerCrop, что у картинки на весь экран, сдвинутый к позиции панели.
+            // Сдвиг самой панели (translation) не учитываем — фон под ней неподвижен.
+            val dx = hostLoc[0] - rootLoc[0] - host.translationX
+            val dy = hostLoc[1] - rootLoc[1] - host.translationY
+            val bw = bmp.width.toFloat()
+            val bh = bmp.height.toFloat()
+            val scale = max(rw / bw, rh / bh)
+            matrix.setScale(scale, scale)
+            matrix.postTranslate((rw - bw * scale) / 2f - dx, (rh - bh * scale) / 2f - dy)
+            canvas.drawBitmap(bmp, matrix, bitmapPaint)
+        }
+        canvas.drawRect(rect, fillPaint)
         canvas.restore()
-        canvas.drawRect(bounds, overlayPaint)
+
+        if (strokePaint.strokeWidth > 0f && strokePaint.alpha > 0) {
+            val h = strokePaint.strokeWidth / 2f
+            rect.inset(h, h)
+            canvas.drawRoundRect(rect, max(0f, radius - h), max(0f, radius - h), strokePaint)
+        }
     }
 
     override fun setAlpha(alpha: Int) = Unit
     override fun setColorFilter(colorFilter: ColorFilter?) = Unit
 
     @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int = PixelFormat.OPAQUE
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }

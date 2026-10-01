@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Слои снизу вверх:
+  1. фон-картинка и затемнение;
+  2. список на весь экран (отступы сверху/снизу считаются в коде по размеру панелей);
+  3. панели поверх: шапка, кнопка сортировки, плеер + нижнее меню.
+  Отступы, скругления и цвета панелей задаются в коде (стиль «скруглённый» / «острый»).
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/appRoot"
@@ -6,7 +13,6 @@
     android:layout_height="match_parent"
     android:background="?attr/colorSurface">
 
-    <!-- Пользовательский фон: неподвижная картинка + затемнение -->
     <ImageView
         android:id="@+id/bgImage"
         android:layout_width="match_parent"
@@ -22,22 +28,64 @@
         android:background="#FF000000"
         android:visibility="gone" />
 
-<LinearLayout
-    android:id="@+id/content"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    <!-- Список / пустое состояние -->
+    <FrameLayout
+        android:id="@+id/listContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
-    <!-- Заголовок (отступ сверху под статус-бар задаётся в коде) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/trackList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false" />
+
+        <LinearLayout
+            android:id="@+id/emptyView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/emptyText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <Button
+                android:id="@+id/grantButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/grant" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Мягкая тень под статус-баром, когда шапка выключена -->
+    <View
+        android:id="@+id/statusScrim"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_gravity="top"
+        android:visibility="gone" />
+
+    <!-- Шапка -->
     <LinearLayout
         android:id="@+id/headerPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/panel"
+        android:layout_gravity="top"
         android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="20dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -88,24 +136,15 @@
                 android:contentDescription="@string/sort"
                 android:src="@drawable/ic_sort"
                 android:visibility="gone" />
-
-            <ImageButton
-                android:id="@+id/bgBtn"
-                style="@style/PlayerButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="-10dp"
-                android:contentDescription="@string/background"
-                android:src="@drawable/ic_image" />
         </LinearLayout>
 
-
-        <!-- Кнопки действий: меняются в зависимости от экрана -->
+        <!-- Кнопки внутри плейлиста -->
         <LinearLayout
             android:id="@+id/actionsRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:layout_marginEnd="10dp"
             android:orientation="horizontal"
             android:visibility="gone">
 
@@ -132,220 +171,203 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Список / пустое состояние -->
-    <FrameLayout
-        android:id="@+id/listContainer"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="?attr/colorSurface">
+    <!-- Сортировка, когда шапка выключена -->
+    <ImageButton
+        android:id="@+id/sortFab"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:contentDescription="@string/sort"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:scaleType="center"
+        android:src="@drawable/ic_sort"
+        android:visibility="gone"
+        app:tint="?attr/colorOnSurface" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/trackList"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="8dp" />
+    <!-- Низ: плеер + меню -->
+    <LinearLayout
+        android:id="@+id/bottomStack"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical">
 
         <LinearLayout
-            android:id="@+id/emptyView"
+            android:id="@+id/playerBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
             android:orientation="vertical"
-            android:padding="32dp"
+            android:paddingHorizontal="18dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="8dp"
             android:visibility="gone">
 
             <TextView
-                android:id="@+id/emptyText"
-                android:layout_width="wrap_content"
+                android:id="@+id/nowTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface" />
+
+            <TextView
+                android:id="@+id/nowArtist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="-16dp"
+                android:layout_marginTop="6dp"
+                android:progressBackgroundTint="@color/track_bg"
+                android:progressTint="?attr/colorPrimary"
+                android:thumbTint="?attr/colorPrimary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/posText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/durText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textAppearance="?attr/textAppearanceBodyLarge"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/grantButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/grant" />
+                <ImageButton
+                    android:id="@+id/shuffleBtn"
+                    style="@style/PlayerButton"
+                    android:contentDescription="@string/shuffle"
+                    android:src="@drawable/ic_shuffle" />
+
+                <ImageButton
+                    android:id="@+id/prevBtn"
+                    style="@style/PlayerButton"
+                    android:contentDescription="@string/previous"
+                    android:src="@drawable/ic_prev" />
+
+                <!-- Круглая голубая кнопка, как на макете -->
+                <ImageButton
+                    android:id="@+id/playBtn"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@drawable/add_btn_bg"
+                    android:contentDescription="@string/play"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_play"
+                    app:tint="@color/on_accent" />
+
+                <ImageButton
+                    android:id="@+id/nextBtn"
+                    style="@style/PlayerButton"
+                    android:contentDescription="@string/next"
+                    android:src="@drawable/ic_next" />
+
+                <ImageButton
+                    android:id="@+id/repeatBtn"
+                    style="@style/PlayerButton"
+                    android:contentDescription="@string/repeat"
+                    android:src="@drawable/ic_repeat" />
+            </LinearLayout>
         </LinearLayout>
-    </FrameLayout>
-
-    <!-- Мини-плеер -->
-    <LinearLayout
-        android:id="@+id/playerBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/panel"
-        android:orientation="vertical"
-        android:paddingHorizontal="12dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/nowTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:textColor="?attr/colorOnSurface" />
-
-        <TextView
-            android:id="@+id/nowArtist"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant" />
-
-        <SeekBar
-            android:id="@+id/seekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
 
         <LinearLayout
+            android:id="@+id/bottomBar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
+            android:layout_height="72dp"
+            android:clipChildren="false"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/posText"
+            <LinearLayout
+                android:id="@+id/navTracks"
+                style="@style/NavItem">
+
+                <FrameLayout style="@style/NavIconBox">
+
+                    <View
+                        android:id="@+id/navTracksPill"
+                        style="@style/NavPill" />
+
+                    <ImageView
+                        android:id="@+id/navTracksIcon"
+                        style="@style/NavIcon"
+                        android:src="@drawable/ic_music" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/navTracksLabel"
+                    style="@style/NavLabel"
+                    android:text="@string/tab_tracks" />
+            </LinearLayout>
+
+            <!-- Центр: шестерёнка (Треки) / «+» (Плейлисты). Ширина слота анимируется -->
+            <FrameLayout
+                android:id="@+id/addSlot"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textAppearance="?attr/textAppearanceLabelMedium"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:layout_height="match_parent"
+                android:clipChildren="false">
 
-            <TextView
-                android:id="@+id/durText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textAppearance="?attr/textAppearanceLabelMedium"
-                android:textColor="?attr/colorOnSurfaceVariant" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <ImageButton
-                android:id="@+id/shuffleBtn"
-                style="@style/PlayerButton"
-                android:contentDescription="@string/shuffle"
-                android:src="@drawable/ic_shuffle" />
-
-            <ImageButton
-                android:id="@+id/prevBtn"
-                style="@style/PlayerButton"
-                android:contentDescription="@string/previous"
-                android:src="@drawable/ic_prev" />
-
-            <ImageButton
-                android:id="@+id/playBtn"
-                style="@style/PlayerButton"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:contentDescription="@string/play"
-                android:src="@drawable/ic_play" />
-
-            <ImageButton
-                android:id="@+id/nextBtn"
-                style="@style/PlayerButton"
-                android:contentDescription="@string/next"
-                android:src="@drawable/ic_next" />
-
-            <ImageButton
-                android:id="@+id/repeatBtn"
-                style="@style/PlayerButton"
-                android:contentDescription="@string/repeat"
-                android:src="@drawable/ic_repeat" />
-        </LinearLayout>
-    </LinearLayout>
-    <!-- Нижнее меню: треки / плейлисты -->
-    <LinearLayout
-        android:id="@+id/bottomBar"
-        android:layout_width="match_parent"
-        android:layout_height="72dp"
-        android:background="@color/panel"
-        android:clipChildren="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:id="@+id/navTracks"
-            style="@style/NavItem">
-
-            <FrameLayout style="@style/NavIconBox">
-
-                <View
-                    android:id="@+id/navTracksPill"
-                    style="@style/NavPill" />
-
-                <ImageView
-                    android:id="@+id/navTracksIcon"
-                    style="@style/NavIcon"
-                    android:src="@drawable/ic_music" />
+                <ImageButton
+                    android:id="@+id/addPlaylistBtn"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/add_btn_bg"
+                    android:contentDescription="@string/settings"
+                    android:elevation="2dp"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/on_accent" />
             </FrameLayout>
 
-            <TextView
-                android:id="@+id/navTracksLabel"
-                style="@style/NavLabel"
-                android:text="@string/tab_tracks" />
-        </LinearLayout>
+            <LinearLayout
+                android:id="@+id/navPlaylists"
+                style="@style/NavItem">
 
-        <!-- Слот под кнопку «+»: ширина анимируется от 0, раздвигая пункты меню -->
-        <FrameLayout
-            android:id="@+id/addSlot"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:clipChildren="false">
+                <FrameLayout style="@style/NavIconBox">
 
-            <ImageButton
-                android:id="@+id/addPlaylistBtn"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_gravity="center"
-                android:background="@drawable/add_btn_bg"
-                android:contentDescription="@string/new_playlist"
-                android:elevation="2dp"
-                android:scaleType="center"
-                android:src="@drawable/ic_add"
-                app:tint="@color/on_accent" />
-        </FrameLayout>
+                    <View
+                        android:id="@+id/navPlaylistsPill"
+                        style="@style/NavPill" />
 
-        <LinearLayout
-            android:id="@+id/navPlaylists"
-            style="@style/NavItem">
+                    <ImageView
+                        android:id="@+id/navPlaylistsIcon"
+                        style="@style/NavIcon"
+                        android:src="@drawable/ic_playlist" />
+                </FrameLayout>
 
-            <FrameLayout style="@style/NavIconBox">
-
-                <View
-                    android:id="@+id/navPlaylistsPill"
-                    style="@style/NavPill" />
-
-                <ImageView
-                    android:id="@+id/navPlaylistsIcon"
-                    style="@style/NavIcon"
-                    android:src="@drawable/ic_playlist" />
-            </FrameLayout>
-
-            <TextView
-                android:id="@+id/navPlaylistsLabel"
-                style="@style/NavLabel"
-                android:text="@string/tab_playlists" />
+                <TextView
+                    android:id="@+id/navPlaylistsLabel"
+                    style="@style/NavLabel"
+                    android:text="@string/tab_playlists" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
 </FrameLayout>

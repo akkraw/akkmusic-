@@ -3,4 +3,5 @@
     <color name="bg">#111518</color>
     <color name="panel">#1A2227</color>
     <color name="accent_text">#8CCBF2</color>
+    <color name="track_bg">#33FFFFFF</color>
 </resources>

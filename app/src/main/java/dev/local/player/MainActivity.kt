@@ -9,6 +9,18 @@ import android.content.res.ColorStateList
 import android.view.animation.OvershootInterpolator
 import android.view.animation.PathInterpolator
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.content.res.Configuration
+import android.graphics.drawable.GradientDrawable
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.shape.MaterialShapeDrawable
+import kotlin.math.PI
+import kotlin.math.sin
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.activity.SystemBarStyle
@@ -56,7 +68,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var screenTitle: TextView
     private lateinit var countText: TextView
     private lateinit var sortBtn: ImageButton
-    private lateinit var bgBtn: ImageButton
+    private lateinit var sortFab: ImageButton
+    private lateinit var statusScrim: View
+    private lateinit var bottomStack: View
 
     // Фон
     private lateinit var appRoot: View
@@ -67,7 +81,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomBar: View
     private var bgSharp: Bitmap? = null
     private var bgBlur: Bitmap? = null
-    private var panelDrawables: List<BackdropDrawable> = emptyList()
+    private var panelDrawables: List<PanelDrawable> = emptyList()
+
+    // Настройки интерфейса
+    private var showHeader = true
+    private var roundedStyle = true
+    private var insetL = 0
+    private var insetT = 0
+    private var insetR = 0
+    private var insetB = 0
+
+    // Центральная кнопка меню: шестерёнка (Треки) ↔ «+» (Плейлисты)
+    private var centerIsGear: Boolean? = null
+    private var centerAnimator: ValueAnimator? = null
     private lateinit var actionsRow: View
 
     // Нижнее меню
@@ -232,13 +258,16 @@ class MainActivity : AppCompatActivity() {
         playCounts = PlayCounts(applicationContext)
         uiPrefs = getSharedPreferences("ui", Context.MODE_PRIVATE)
         trackSort = TrackSort.fromName(uiPrefs.getString(KEY_SORT, null))
+        showHeader = uiPrefs.getBoolean(KEY_HEADER, true)
+        roundedStyle = uiPrefs.getBoolean(KEY_ROUNDED, true)
         bindViews()
-        setupInsets()
         Backdrop.load(this)?.let { (sharp, blur) ->
             bgSharp = sharp
             bgBlur = blur
         }
         applyBackground()
+        setupInsets()
+        applyStyle()
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         savedInstanceState?.let {
@@ -350,7 +379,50 @@ class MainActivity : AppCompatActivity() {
         val onTracks = screen == Screen.TRACKS
         setNavSelected(navTracksPill, navTracksIcon, navTracksLabel, onTracks, animate)
         setNavSelected(navPlaylistsPill, navPlaylistsIcon, navPlaylistsLabel, !onTracks, animate)
-        setAddButtonVisible(screen == Screen.PLAYLISTS, animate)
+        // Внутри плейлиста центральная кнопка прячется
+        if (screen != Screen.PLAYLIST) setCenterMode(gear = onTracks, animate = animate)
+        setAddButtonVisible(screen != Screen.PLAYLIST, animate)
+    }
+
+    /** Шестерёнка ↔ «+»: кнопка проворачивается на пол-оборота и меняет значок посередине. */
+    private fun setCenterMode(gear: Boolean, animate: Boolean) {
+        if (centerIsGear == gear) return
+        val first = centerIsGear == null
+        centerIsGear = gear
+        val icon = if (gear) R.drawable.ic_settings else R.drawable.ic_add
+        addPlaylistBtn.contentDescription =
+            getString(if (gear) R.string.settings else R.string.new_playlist)
+        centerAnimator?.cancel()
+
+        if (!animate || first || addPlaylistBtn.scaleX < 0.05f) {
+            addPlaylistBtn.setImageResource(icon)
+            return
+        }
+        val startRot = addPlaylistBtn.rotation
+        val turn = if (gear) -180f else 180f
+        var swapped = false
+        centerAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 380
+            interpolator = easing
+            addUpdateListener { a ->
+                val f = a.animatedValue as Float
+                addPlaylistBtn.rotation = startRot + turn * f
+                val sc = 1f - 0.18f * sin(PI * f).toFloat()
+                addPlaylistBtn.scaleX = sc
+                addPlaylistBtn.scaleY = sc
+                if (!swapped && f >= 0.5f) {
+                    swapped = true
+                    addPlaylistBtn.setImageResource(icon)
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (!swapped) addPlaylistBtn.setImageResource(icon)
+                    addPlaylistBtn.rotation = addPlaylistBtn.rotation % 360f
+                }
+            })
+            start()
+        }
     }
 
     private fun setNavSelected(
@@ -376,7 +448,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** «+» выезжает между пунктами: слот расширяется, кнопка вырастает с поворотом. */
+    /** Центральная кнопка выезжает между пунктами: слот расширяется, кнопка вырастает с поворотом. */
     private fun setAddButtonVisible(show: Boolean, animate: Boolean) {
         if (addShown == show) return
         addShown = show
@@ -435,8 +507,7 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         backCallback.isEnabled = screen == Screen.PLAYLIST
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
-        sortBtn.visibility = if (screen == Screen.TRACKS) View.VISIBLE else View.GONE
-        bgBtn.visibility = if (screen != Screen.PLAYLIST) View.VISIBLE else View.GONE
+        updateChrome()
         val counts = playCounts.all()
         trackAdapter.setPlayCounts(counts)
 
@@ -502,56 +573,129 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Отступы под системные панели ----------
+    // ---------- Панели: стиль, отступы, фон ----------
 
-    /** Шапка заходит под статус-бар, нижнее меню — под панель навигации. */
+    private fun dp(v: Float): Float = v * resources.displayMetrics.density
+    private fun dpi(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun isNight(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+
+    /** Системные отступы (статус-бар, навигация) запоминаем и раскладываем панели. */
     private fun setupInsets() {
-        val d = resources.displayMetrics.density
-        val headerTop = headerPanel.paddingTop
-        val headerBottom = headerPanel.paddingBottom
-        val headerSide = headerPanel.paddingLeft
-        val barHeight = (72 * d).toInt()
         ViewCompat.setOnApplyWindowInsetsListener(appRoot) { _, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            headerPanel.setPadding(
-                headerSide + bars.left, headerTop + bars.top,
-                headerSide + bars.right, headerBottom,
-            )
-            bottomBar.setPadding(bars.left, 0, bars.right, bars.bottom)
-            bottomBar.layoutParams.height = barHeight + bars.bottom
-            listContainer.setPadding(bars.left, 0, bars.right, 0)
-            bottomBar.requestLayout()
+            insetL = bars.left
+            insetT = bars.top
+            insetR = bars.right
+            insetB = bars.bottom
+            applyStyle()
             insets
         }
+        // Список подстраивает отступы под фактический размер панелей
+        val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            list.post { updateListPadding() }
+        }
+        headerPanel.addOnLayoutChangeListener(relayout)
+        bottomStack.addOnLayoutChangeListener(relayout)
     }
 
-    // ---------- Фон ----------
+    private fun headerVisible(): Boolean = showHeader || screen == Screen.PLAYLIST
+
+    /** Что видно сверху: шапка (всегда внутри плейлиста) или маленькая кнопка сортировки. */
+    private fun updateChrome() {
+        headerPanel.visibility = if (headerVisible()) View.VISIBLE else View.GONE
+        sortBtn.visibility =
+            if (screen == Screen.TRACKS && showHeader) View.VISIBLE else View.GONE
+        sortFab.visibility =
+            if (screen == Screen.TRACKS && !showHeader) View.VISIBLE else View.GONE
+        statusScrim.visibility = if (headerVisible()) View.GONE else View.VISIBLE
+        list.post { updateListPadding() }
+    }
+
+    /**
+     * Скруглённый стиль: панели — отдельные карточки с отступом 12dp и радиусом 28dp.
+     * Острый: панели прижаты к краям экрана, без скруглений.
+     */
+    private fun applyStyle() {
+        val m = if (roundedStyle) dpi(12) else 0
+
+        (headerPanel.layoutParams as FrameLayout.LayoutParams).setMargins(
+            m + insetL, if (roundedStyle) insetT + dpi(8) else 0, m + insetR, 0
+        )
+        if (roundedStyle) {
+            headerPanel.setPadding(dpi(20), dpi(12), dpi(10), dpi(12))
+        } else {
+            headerPanel.setPadding(dpi(20) + insetL, dpi(12) + insetT, dpi(10) + insetR, dpi(12))
+        }
+
+        (sortFab.layoutParams as FrameLayout.LayoutParams).setMargins(
+            0, insetT + dpi(8), dpi(12) + insetR, 0
+        )
+        statusScrim.layoutParams.height = insetT + dpi(24)
+
+        (bottomStack.layoutParams as FrameLayout.LayoutParams).setMargins(
+            m + insetL, 0, m + insetR, if (roundedStyle) insetB + m else 0
+        )
+        (playerBar.layoutParams as LinearLayout.LayoutParams).bottomMargin =
+            if (roundedStyle) dpi(8) else 0
+        if (roundedStyle) {
+            playerBar.setPadding(dpi(18), dpi(14), dpi(18), dpi(8))
+            bottomBar.setPadding(dpi(6), 0, dpi(6), 0)
+            bottomBar.layoutParams.height = dpi(68)
+        } else {
+            playerBar.setPadding(dpi(18) + insetL, dpi(14), dpi(18) + insetR, dpi(8))
+            bottomBar.setPadding(insetL, 0, insetR, insetB)
+            bottomBar.layoutParams.height = dpi(72) + insetB
+        }
+        listContainer.setPadding(insetL, 0, insetR, 0)
+
+        val border = if (bgBlur != null || isNight()) 0x14FFFFFF else 0x14000000
+        panelDrawables.forEach { d ->
+            d.radius = if (!roundedStyle) 0f else if (d === sortFab.background) dp(22f) else dp(28f)
+            d.setStroke(border, if (roundedStyle) dp(1f) else 0f)
+        }
+        trackAdapter.setRounded(roundedStyle)
+
+        listOf(headerPanel, sortFab, bottomStack, playerBar, bottomBar, statusScrim)
+            .forEach { it.requestLayout() }
+        list.post { updateListPadding() }
+    }
+
+    /** Список начинается под шапкой и заканчивается над плеером, но прокручивается под ними. */
+    private fun updateListPadding() {
+        val gap = if (roundedStyle) dpi(4) else 0
+        val top = when {
+            headerPanel.visibility == View.VISIBLE -> headerPanel.bottom + gap
+            sortFab.visibility == View.VISIBLE -> insetT + dpi(60)
+            else -> insetT + dpi(8)
+        }
+        val bottom = (appRoot.height - bottomStack.top).coerceAtLeast(0) + gap
+        if (list.paddingTop != top || list.paddingBottom != bottom) {
+            list.setPadding(0, top, 0, bottom)
+        }
+        emptyView.translationY = (top - bottom) / 2f
+    }
 
     private fun bgDim(): Int = (uiPrefs.getInt(KEY_BG_DIM, 50) / 5 * 5).coerceIn(0, 90)
 
     private fun applyBackground() {
         val sharp = bgSharp
         val blur = bgBlur
-        val panels = listOf(headerPanel, playerBar, bottomBar)
-        if (sharp == null || blur == null) {
+        val hasBg = sharp != null && blur != null
+        if (hasBg) {
+            bgImage.setImageBitmap(sharp)
+            bgImage.visibility = View.VISIBLE
+            bgScrim.visibility = View.VISIBLE
+        } else {
             bgImage.visibility = View.GONE
             bgScrim.visibility = View.GONE
-            panelDrawables = emptyList()
-            val panel = ContextCompat.getColor(this, R.color.panel)
-            panels.forEach { it.setBackgroundColor(panel) }
-            listContainer.setBackgroundColor(
-                MaterialColors.getColor(listContainer, com.google.android.material.R.attr.colorSurface)
-            )
-            return
         }
-        bgImage.setImageBitmap(sharp)
-        bgImage.visibility = View.VISIBLE
-        bgScrim.visibility = View.VISIBLE
-        listContainer.background = null
-        panelDrawables = panels.map { v ->
-            BackdropDrawable(blur, appRoot, v).also { v.background = it }
+        panelDrawables = listOf(headerPanel, playerBar, bottomBar, sortFab).map { v ->
+            PanelDrawable(if (hasBg) blur else null, appRoot, v).also { v.background = it }
         }
         // Панели могут сдвинуться (появился плеер) — перерисовываем кусок фона под ними
         appRoot.viewTreeObserver.addOnGlobalLayoutListener {
@@ -562,48 +706,95 @@ class MainActivity : AppCompatActivity() {
 
     /** Список затемняется на [percent]%, панели — заметно сильнее. */
     private fun updateDim(percent: Int) {
-        val d = percent / 100f
-        bgScrim.alpha = d
-        val panel = d + (1f - d) * 0.6f
-        val overlay = Color.argb((panel * 255).toInt(), 6, 11, 15)
-        panelDrawables.forEach { it.setOverlay(overlay) }
+        val fill: Int
+        val scrimTop: Int
+        if (bgBlur != null) {
+            val d = percent / 100f
+            bgScrim.alpha = d
+            val panel = d + (1f - d) * 0.6f
+            fill = Color.argb((panel * 255).toInt(), 6, 11, 15)
+            scrimTop = Color.argb(217, 6, 11, 15)
+        } else {
+            fill = ContextCompat.getColor(this, R.color.panel)
+            val surface = MaterialColors.getColor(appRoot, com.google.android.material.R.attr.colorSurface)
+            scrimTop = (surface and 0x00FFFFFF) or (0xE6 shl 24)
+        }
+        panelDrawables.forEach { it.setFill(fill) }
+        statusScrim.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(scrimTop, scrimTop and 0x00FFFFFF),
+        )
     }
 
-    private fun showBackgroundDialog() {
-        val v = layoutInflater.inflate(R.layout.dialog_background, null)
+    // ---------- Настройки ----------
+
+    private fun openSettings() {
+        val v = layoutInflater.inflate(R.layout.sheet_settings, null)
+        val headerRow = v.findViewById<View>(R.id.headerRow)
+        val headerSwitch = v.findViewById<MaterialSwitch>(R.id.headerSwitch)
+        val styleGroup = v.findViewById<MaterialButtonToggleGroup>(R.id.styleGroup)
+        val bgHint = v.findViewById<TextView>(R.id.bgHint)
         val pickBtn = v.findViewById<Button>(R.id.bgPickBtn)
         val removeBtn = v.findViewById<Button>(R.id.bgRemoveBtn)
         val dimBlock = v.findViewById<View>(R.id.bgDimBlock)
         val slider = v.findViewById<Slider>(R.id.bgDimSlider)
         val hasBg = bgSharp != null
+        v.setPadding(0, 0, 0, insetB)
 
+        // Шапка — применяется сразу
+        headerSwitch.isChecked = showHeader
+        headerSwitch.setOnCheckedChangeListener { _, checked ->
+            showHeader = checked
+            uiPrefs.edit().putBoolean(KEY_HEADER, checked).apply()
+            render()
+        }
+        headerRow.setOnClickListener { headerSwitch.toggle() }
+
+        // Стиль углов — тоже сразу, видно за шторкой
+        styleGroup.check(if (roundedStyle) R.id.styleRounded else R.id.styleSharp)
+        styleGroup.addOnButtonCheckedListener { _, id, checked ->
+            if (!checked) return@addOnButtonCheckedListener
+            roundedStyle = id == R.id.styleRounded
+            uiPrefs.edit().putBoolean(KEY_ROUNDED, roundedStyle).apply()
+            applyStyle()
+        }
+
+        // Фон
+        bgHint.visibility = if (hasBg) View.GONE else View.VISIBLE
         pickBtn.setText(if (hasBg) R.string.bg_change else R.string.bg_pick)
         dimBlock.visibility = if (hasBg) View.VISIBLE else View.GONE
         removeBtn.visibility = if (hasBg) View.VISIBLE else View.GONE
         slider.value = bgDim().toFloat()
         slider.setLabelFormatter { "${it.toInt()}%" }
-        // Затемнение меняется вживую, пока двигаешь ползунок
         slider.addOnChangeListener { _, value, _ -> updateDim(value.toInt()) }
 
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.background)
-            .setView(v)
-            .setPositiveButton(R.string.done, null)
-            .setOnDismissListener {
-                if (hasBg) uiPrefs.edit().putInt(KEY_BG_DIM, slider.value.toInt()).apply()
+        val sheet = BottomSheetDialog(this)
+        sheet.setContentView(v)
+        sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        sheet.behavior.skipCollapsed = true
+        sheet.setOnShowListener {
+            // Почти не затемняем экран, чтобы было видно изменения
+            sheet.window?.setDimAmount(0.15f)
+            val bottomSheet = sheet.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            (bottomSheet?.background as? MaterialShapeDrawable)?.let { bg ->
+                val r = if (roundedStyle) dp(28f) else 0f
+                bg.shapeAppearanceModel = bg.shapeAppearanceModel.toBuilder()
+                    .setTopLeftCornerSize(r).setTopRightCornerSize(r).build()
             }
-            .show()
-        // Почти не затемняем экран за диалогом, чтобы было видно результат
-        dialog.window?.setDimAmount(0.1f)
+        }
+        sheet.setOnDismissListener {
+            if (hasBg) uiPrefs.edit().putInt(KEY_BG_DIM, slider.value.toInt()).apply()
+        }
+        sheet.show()
 
         pickBtn.setOnClickListener {
-            dialog.dismiss()
+            sheet.dismiss()
             pickImage.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
         }
         removeBtn.setOnClickListener {
-            dialog.dismiss()
+            sheet.dismiss()
             ioExecutor.execute {
                 Backdrop.remove(applicationContext)
                 runOnUiThread { if (!isDestroyed) recreate() }
@@ -758,7 +949,9 @@ class MainActivity : AppCompatActivity() {
         screenTitle = findViewById(R.id.screenTitle)
         countText = findViewById(R.id.countText)
         sortBtn = findViewById(R.id.sortBtn)
-        bgBtn = findViewById(R.id.bgBtn)
+        sortFab = findViewById(R.id.sortFab)
+        statusScrim = findViewById(R.id.statusScrim)
+        bottomStack = findViewById(R.id.bottomStack)
         appRoot = findViewById(R.id.appRoot)
         bgImage = findViewById(R.id.bgImage)
         bgScrim = findViewById(R.id.bgScrim)
@@ -805,12 +998,17 @@ class MainActivity : AppCompatActivity() {
         }
         backBtn.setOnClickListener { showScreen(Screen.PLAYLISTS) }
         sortBtn.setOnClickListener { chooseSort() }
-        bgBtn.setOnClickListener { showBackgroundDialog() }
+        sortFab.setOnClickListener { chooseSort() }
         grantButton.setOnClickListener { requestPermissions() }
+        // Центральная кнопка: на «Треках» — настройки, на «Плейлистах» — новый плейлист
         addPlaylistBtn.setOnClickListener {
-            askName(R.string.new_playlist, "", R.string.create) { name ->
-                playlists.create(name)
-                render()
+            if (screen == Screen.TRACKS) {
+                openSettings()
+            } else {
+                askName(R.string.new_playlist, "", R.string.create) { name ->
+                    playlists.create(name)
+                    render()
+                }
             }
         }
         playAllBtn.setOnClickListener { playQueue(openPlaylistTracks(), 0) }
@@ -907,5 +1105,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_PLAYLIST = "playlist"
         private const val KEY_SORT = "track_sort"
         private const val KEY_BG_DIM = "bg_dim"
+        private const val KEY_HEADER = "show_header"
+        private const val KEY_ROUNDED = "rounded_style"
     }
 }
