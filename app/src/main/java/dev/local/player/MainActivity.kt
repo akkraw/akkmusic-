@@ -613,6 +613,7 @@ class MainActivity : AppCompatActivity() {
         sortFab.visibility =
             if (screen == Screen.TRACKS && !showHeader) View.VISIBLE else View.GONE
         statusScrim.visibility = if (headerVisible()) View.GONE else View.VISIBLE
+        list.invalidateItemDecorations()
         list.post { updateListPadding() }
     }
 
@@ -633,7 +634,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         (sortFab.layoutParams as FrameLayout.LayoutParams).setMargins(
-            0, insetT + dpi(4), dpi(12) + insetR, 0
+            0, insetT + dpi(4) + dpi(12), dpi(12) + insetR, 0
         )
         statusScrim.layoutParams.height = insetT + dpi(24)
 
@@ -655,7 +656,7 @@ class MainActivity : AppCompatActivity() {
 
         val border = if (bgBlur != null || isNight()) 0x14FFFFFF else 0x14000000
         panelDrawables.forEach { d ->
-            d.radius = if (!roundedStyle) 0f else if (d === sortFab.background) dp(20f) else dp(28f)
+            d.radius = if (!roundedStyle) 0f else if (d === sortFab.background) dp(22f) else dp(28f)
             d.setStroke(border, if (roundedStyle) dp(1f) else 0f)
         }
         trackAdapter.setRounded(roundedStyle)
@@ -670,8 +671,6 @@ class MainActivity : AppCompatActivity() {
         val gap = if (roundedStyle) dpi(4) else 0
         val top = when {
             headerPanel.visibility == View.VISIBLE -> headerPanel.bottom + gap
-            // место под кнопку сортировки (40dp + по 4dp сверху и снизу)
-            sortFab.visibility == View.VISIBLE -> insetT + dpi(48)
             else -> insetT + dpi(4)
         }
         val bottom = (appRoot.height - bottomStack.top).coerceAtLeast(0) + gap
@@ -989,6 +988,20 @@ class MainActivity : AppCompatActivity() {
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
+        list.addItemDecoration(object : RecyclerView.ItemDecoration() {
+            override fun getItemOffsets(
+                outRect: android.graphics.Rect, view: View,
+                parent: RecyclerView, state: RecyclerView.State,
+            ) {
+                // Без шапки в правом верхнем углу кнопка сортировки: первая строка
+                // заканчивается перед ней, а не прячет под ней время трека
+                if (sortFab.visibility == View.VISIBLE &&
+                    parent.getChildAdapterPosition(view) == 0
+                ) {
+                    outRect.right = dpi(48)
+                }
+            }
+        })
 
         navTracks.setOnClickListener {
             if (screen != Screen.TRACKS) showScreen(Screen.TRACKS)

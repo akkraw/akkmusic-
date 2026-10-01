@@ -84,9 +84,12 @@ class TrackAdapter(
         holder.plays.text = (playCounts[t.id] ?: 0).toString()
         val playing = t.id.toString() == currentId
         holder.itemView.isActivated = playing
+        // Фон с отступами (inset) подменяет собственные отступы строки —
+        // поэтому после смены фона возвращаем исходные отступы из разметки
         holder.itemView.setBackgroundResource(
             if (rounded) R.drawable.item_bg_rounded else R.drawable.item_bg
         )
+        holder.itemView.setPadding(holder.padL, holder.padT, holder.padR, holder.padB)
         holder.title.setTextColor(
             if (playing) ContextCompat.getColor(holder.title.context, R.color.accent_text)
             else MaterialColors.getColor(holder.title, com.google.android.material.R.attr.colorOnSurface)
@@ -115,6 +118,12 @@ class TrackAdapter(
         val duration: TextView = view.findViewById(R.id.trackDuration)
         val plays: TextView = view.findViewById(R.id.trackPlays)
         val handle: ImageView = view.findViewById(R.id.dragHandle)
+
+        // Отступы строки из item_track.xml, запомненные до того, как фон их перезапишет
+        val padL = view.paddingLeft
+        val padT = view.paddingTop
+        val padR = view.paddingRight
+        val padB = view.paddingBottom
     }
 }
 

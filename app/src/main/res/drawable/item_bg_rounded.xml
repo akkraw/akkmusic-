@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Подсветка строки в скруглённом стиле: плашка с отступом 12dp (по линии с панелями) и радиусом 16dp -->
+<!-- Подсветка строки в скруглённом стиле: плашка с отступом 6dp и радиусом 16dp -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="?attr/colorControlHighlight">
     <item android:id="@android:id/mask">
-        <inset android:insetLeft="12dp" android:insetRight="12dp">
+        <inset android:insetLeft="6dp" android:insetRight="6dp">
             <shape android:shape="rectangle">
                 <solid android:color="#FFFFFFFF" />
                 <corners android:radius="16dp" />
@@ -11,7 +11,7 @@
         </inset>
     </item>
     <item>
-        <inset android:insetLeft="12dp" android:insetRight="12dp">
+        <inset android:insetLeft="6dp" android:insetRight="6dp">
             <selector>
                 <item android:state_activated="true">
                     <shape android:shape="rectangle">
