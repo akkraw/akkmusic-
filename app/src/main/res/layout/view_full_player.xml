@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Большой плеер: открывается тапом по мини-плееру, закрывается свайпом вниз или «назад» -->
+<dev.local.player.DragDismissLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/fullPlayer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:clickable="true"
+    android:focusable="true"
+    android:visibility="gone">
+
+    <!-- Размытая обложка на весь экран + затемнение -->
+    <ImageView
+        android:id="@+id/fpBackdrop"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:id="@+id/fpScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/fpContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="28dp">
+
+        <!-- Верх: свернуть / откуда играет / таймер сна -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="-12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/fpClose"
+                style="@style/PlayerButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/fp_close"
+                android:src="@drawable/ic_expand_more" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/fp_now_playing"
+                    android:textAllCaps="true"
+                    android:textAppearance="?attr/textAppearanceLabelSmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/fpQueuePos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/colorOnSurface" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fpSleep"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/sleep_timer"
+                android:gravity="center"
+                android:minWidth="48dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
+
+                <TextView
+                    android:id="@+id/fpSleepLeft"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/akkAccentText"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/fpSleepIcon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_bedtime"
+                    app:tint="?attr/colorOnSurface" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Обложка с цветной тенью; размер задаётся в коде (квадрат) -->
+        <FrameLayout
+            android:id="@+id/fpCoverBox"
+            android:layout_width="280dp"
+            android:layout_height="280dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <ImageView
+                android:id="@+id/fpShadow"
+                android:layout_width="490dp"
+                android:layout_height="490dp"
+                android:layout_gravity="center"
+                android:alpha="0.85"
+                android:importantForAccessibility="no"
+                android:scaleType="fitXY"
+                android:translationY="22dp" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/fpCoverCard"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="20dp"
+                app:strokeWidth="0dp">
+
+                <ImageView
+                    android:id="@+id/fpCover"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/fp_cover"
+                    android:scaleType="centerCrop" />
+            </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Название / исполнитель / альбом -->
+        <TextView
+            android:id="@+id/fpTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="marquee"
+            android:gravity="center"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:singleLine="true"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/fpArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/akkAccentText" />
+
+        <TextView
+            android:id="@+id/fpAlbum"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <!-- Таймлайн -->
+        <SeekBar
+            android:id="@+id/fpSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="-16dp"
+            android:layout_marginTop="24dp"
+            android:maxHeight="6dp"
+            android:minHeight="6dp"
+            android:progressBackgroundTint="@color/track_bg"
+            android:progressTint="?attr/akkAccent"
+            android:thumbTint="?attr/akkAccent" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/fpPos"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <!-- Сколько раз прослушан -->
+            <TextView
+                android:id="@+id/fpPlays"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:drawablePadding="4dp"
+                android:gravity="center_vertical"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/akkAccentText"
+                app:drawableStartCompat="@drawable/ic_headphones"
+                app:drawableTint="?attr/akkAccentText" />
+
+            <TextView
+                android:id="@+id/fpDur"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <!-- Управление -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/fpShuffle"
+                style="@style/PlayerButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/shuffle"
+                android:src="@drawable/ic_shuffle" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/fpPrev"
+                style="@style/PlayerButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/previous"
+                android:scaleX="1.25"
+                android:scaleY="1.25"
+                android:src="@drawable/ic_prev" />
+
+            <ImageButton
+                android:id="@+id/fpPlay"
+                android:layout_width="76dp"
+                android:layout_height="76dp"
+                android:layout_marginHorizontal="18dp"
+                android:background="@drawable/add_btn_bg"
+                android:contentDescription="@string/play"
+                android:elevation="6dp"
+                android:scaleType="center"
+                android:src="@drawable/ic_play_big"
+                app:tint="?attr/akkOnAccent" />
+
+            <ImageButton
+                android:id="@+id/fpNext"
+                style="@style/PlayerButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/next"
+                android:scaleX="1.25"
+                android:scaleY="1.25"
+                android:src="@drawable/ic_next" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/fpRepeat"
+                style="@style/PlayerButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/repeat"
+                android:src="@drawable/ic_repeat" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="0.6" />
+    </LinearLayout>
+</dev.local.player.DragDismissLayout>

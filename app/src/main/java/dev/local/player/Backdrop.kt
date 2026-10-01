@@ -108,6 +108,32 @@ object Backdrop {
         return small
     }
 
+    /**
+     * Мягкое цветное «свечение» для тени под обложкой: картинка уменьшается до 64 px,
+     * кладётся в центр прозрачного холста 112×112 и сильно размывается — края уходят в ноль.
+     * Холст в 1.75 раза больше содержимого.
+     */
+    fun glow(src: Bitmap): Bitmap {
+        val inner = 64
+        val pad = 24
+        val side = inner + pad * 2
+        val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(
+            Bitmap.createScaledBitmap(src, inner, inner, true), pad.toFloat(), pad.toFloat(), null
+        )
+        val px = IntArray(side * side)
+        out.getPixels(px, 0, side, 0, 0, side, side)
+        repeat(3) {
+            boxBlur(px, side, side, 7, horizontal = true)
+            boxBlur(px, side, side, 7, horizontal = false)
+        }
+        out.setPixels(px, 0, side, 0, 0, side, side)
+        return out
+    }
+
+    /** Размытие на весь экран для фона большого плеера. */
+    fun blurForBackdrop(src: Bitmap): Bitmap = blur(src)
+
     private fun boxBlur(p: IntArray, w: Int, h: Int, r: Int, horizontal: Boolean) {
         val len = if (horizontal) w else h
         val lines = if (horizontal) h else w

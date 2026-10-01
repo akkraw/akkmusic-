@@ -1,7 +1,9 @@
 package dev.local.player
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -12,6 +14,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -31,6 +35,59 @@ class PlaybackService : MediaSessionService() {
     private var lastTickAt = 0L
     private var counted = false      // уже засчитан в этот раз
 
+    // ---------- Таймер сна ----------
+    private val sleepFire = Runnable { startSleepFade() }
+    private var fadeStep = 0
+
+    private val fadeTick = object : Runnable {
+        override fun run() {
+            val player = mediaSession?.player ?: return
+            fadeStep++
+            if (fadeStep >= FADE_STEPS) {
+                player.pause()
+                player.volume = 1f
+                clearSleep()
+            } else {
+                player.volume = 1f - fadeStep.toFloat() / FADE_STEPS
+                handler.postDelayed(this, FADE_MS / FADE_STEPS)
+            }
+        }
+    }
+
+    /** minutes > 0 — через столько минут; 0 — в конце текущего трека; < 0 — выключить. */
+    private fun setSleep(minutes: Int) {
+        val player = mediaSession?.player ?: return
+        handler.removeCallbacks(sleepFire)
+        handler.removeCallbacks(fadeTick)
+        player.volume = 1f
+        (player as? ExoPlayer)?.pauseAtEndOfMediaItems = false
+        val prefs = getSharedPreferences(SLEEP_PREFS, Context.MODE_PRIVATE).edit()
+        when {
+            minutes > 0 -> {
+                val delay = minutes * 60_000L
+                // затухание начинается за FADE_MS до конца
+                handler.postDelayed(sleepFire, (delay - FADE_MS).coerceAtLeast(0))
+                prefs.putLong(KEY_SLEEP_AT, System.currentTimeMillis() + delay)
+            }
+            minutes == 0 -> {
+                (player as? ExoPlayer)?.pauseAtEndOfMediaItems = true
+                prefs.putLong(KEY_SLEEP_AT, SLEEP_END_OF_TRACK)
+            }
+            else -> prefs.remove(KEY_SLEEP_AT)
+        }
+        prefs.apply()
+    }
+
+    private fun startSleepFade() {
+        fadeStep = 0
+        handler.post(fadeTick)
+    }
+
+    private fun clearSleep() {
+        (mediaSession?.player as? ExoPlayer)?.pauseAtEndOfMediaItems = false
+        getSharedPreferences(SLEEP_PREFS, Context.MODE_PRIVATE).edit().remove(KEY_SLEEP_AT).apply()
+    }
+
     private val listenTick = object : Runnable {
         override fun run() {
             accumulate()
@@ -45,6 +102,12 @@ class PlaybackService : MediaSessionService() {
             playedMs = 0
             counted = false
             lastTickAt = SystemClock.elapsedRealtime()
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                clearSleep()
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -129,6 +192,9 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(listenTick)
+        handler.removeCallbacks(sleepFire)
+        handler.removeCallbacks(fadeTick)
+        getSharedPreferences(SLEEP_PREFS, Context.MODE_PRIVATE).edit().remove(KEY_SLEEP_AT).apply()
         mediaSession?.run {
             player.release()
             release()
@@ -141,7 +207,34 @@ class PlaybackService : MediaSessionService() {
      * Когда UI передаёт треки в сессию, URI файла может потеряться при упаковке.
      * Поэтому кладём его в requestMetadata.mediaUri и восстанавливаем здесь.
      */
-    private class SessionCallback : MediaSession.Callback {
+    private inner class SessionCallback : MediaSession.Callback {
+
+        // Разрешаем приложению отправлять команду таймера сна
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand(CMD_SLEEP, Bundle.EMPTY))
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == CMD_SLEEP) {
+                setSleep(args.getInt(ARG_MINUTES, -1))
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            return super.onCustomCommand(session, controller, customCommand, args)
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -153,5 +246,16 @@ class PlaybackService : MediaSessionService() {
             }.toMutableList()
             return Futures.immediateFuture(resolved)
         }
+    }
+
+    companion object {
+        const val CMD_SLEEP = "dev.local.player.SLEEP"
+        const val ARG_MINUTES = "minutes"
+        const val SLEEP_PREFS = "sleep"
+        /** Время остановки (мс) или SLEEP_END_OF_TRACK; отсутствует — таймер выключен. */
+        const val KEY_SLEEP_AT = "sleep_at"
+        const val SLEEP_END_OF_TRACK = -2L
+        private const val FADE_MS = 10_000L
+        private const val FADE_STEPS = 20
     }
 }

@@ -10,6 +10,12 @@ import android.view.animation.OvershootInterpolator
 import android.view.animation.PathInterpolator
 import android.widget.ImageView
 import android.view.Gravity
+import android.view.GestureDetector
+import android.view.MotionEvent
+import androidx.media3.session.SessionCommand
+import com.google.android.material.card.MaterialCardView
+import kotlin.math.abs
+import kotlin.math.ceil
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.widget.doAfterTextChanged
 import android.widget.LinearLayout
@@ -82,6 +88,36 @@ class MainActivity : AppCompatActivity() {
     private lateinit var headerSearchClose: ImageButton
     private lateinit var titleBlock: View
     private lateinit var headerCover: ImageView
+
+    // Большой плеер
+    private lateinit var fullPlayer: DragDismissLayout
+    private lateinit var fpBackdrop: ImageView
+    private lateinit var fpScrim: View
+    private lateinit var fpContent: View
+    private lateinit var fpQueuePos: TextView
+    private lateinit var fpSleep: View
+    private lateinit var fpSleepLeft: TextView
+    private lateinit var fpSleepIcon: ImageView
+    private lateinit var fpCoverBox: View
+    private lateinit var fpShadow: ImageView
+    private lateinit var fpCoverCard: MaterialCardView
+    private lateinit var fpCover: ImageView
+    private lateinit var fpTitle: TextView
+    private lateinit var fpArtist: TextView
+    private lateinit var fpAlbum: TextView
+    private lateinit var fpSeek: SeekBar
+    private lateinit var fpPos: TextView
+    private lateinit var fpPlays: TextView
+    private lateinit var fpDur: TextView
+    private lateinit var fpShuffle: ImageButton
+    private lateinit var fpPlay: ImageButton
+    private lateinit var fpRepeat: ImageButton
+    private var fullOpen = false
+    private var pendingOpenFull = false
+    private var fpLoadedId: String? = null
+    private var fpSeeking = false
+    private var fpCoverScale = 1f
+    private var placeholderGlow: Bitmap? = null
 
     // Поиск
     private var searchQuery = ""
@@ -263,6 +299,7 @@ class MainActivity : AppCompatActivity() {
     private val progressTick = object : Runnable {
         override fun run() {
             updateProgress()
+            if (fullOpen) updateSleepLabel()
             handler.postDelayed(this, 500)
         }
     }
@@ -275,7 +312,11 @@ class MainActivity : AppCompatActivity() {
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
-            if (searchActive()) closeSearch() else showScreen(Screen.PLAYLISTS)
+            when {
+                fullOpen -> closeFullPlayer()
+                searchActive() -> closeSearch()
+                else -> showScreen(Screen.PLAYLISTS)
+            }
         }
     }
 
@@ -323,6 +364,7 @@ class MainActivity : AppCompatActivity() {
             pendingCoverId = it.getLong(KEY_PENDING_COVER, -1)
             headerSearchOpen = it.getBoolean(KEY_HEADER_SEARCH, false)
             reopenSettings = it.getBoolean(KEY_SETTINGS_OPEN, false)
+            pendingOpenFull = it.getBoolean(KEY_FULL_OPEN, false)
             setQuery(it.getString(KEY_SEARCH, "") ?: "", null, refresh = false)
             if (screen == Screen.PLAYLIST && playlists.get(openPlaylistId) == null) {
                 screen = Screen.PLAYLISTS
@@ -345,6 +387,7 @@ class MainActivity : AppCompatActivity() {
         outState.putInt(KEY_SCREEN, screen.ordinal)
         outState.putLong(KEY_PLAYLIST, openPlaylistId)
         outState.putLong(KEY_PENDING_COVER, pendingCoverId)
+        outState.putBoolean(KEY_FULL_OPEN, fullOpen)
         outState.putString(KEY_SEARCH, searchQuery)
         outState.putBoolean(KEY_HEADER_SEARCH, headerSearchOpen)
         outState.putBoolean(KEY_SETTINGS_OPEN, reopenSettings || settingsSheet?.isShowing == true)
@@ -359,6 +402,10 @@ class MainActivity : AppCompatActivity() {
             controller?.let {
                 it.addListener(playerListener)
                 updatePlayerUi()
+                if (pendingOpenFull) {
+                    pendingOpenFull = false
+                    openFullPlayer(animate = false)
+                }
             }
         }, MoreExecutors.directExecutor())
         handler.post(progressTick)
@@ -567,7 +614,7 @@ class MainActivity : AppCompatActivity() {
         playlists.get(openPlaylistId)?.trackIds?.mapNotNull { trackById[it] } ?: emptyList()
 
     private fun render() {
-        backCallback.isEnabled = screen == Screen.PLAYLIST || searchActive()
+        updateBackEnabled()
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
         headerCover.visibility = View.GONE
         updateChrome()
@@ -787,6 +834,8 @@ class MainActivity : AppCompatActivity() {
             d.setStroke(border, if (roundedStyle) dp(1f) else 0f)
         }
         trackAdapter.setRounded(roundedStyle)
+        fpCoverCard.radius = if (roundedStyle) dp(24f) else 0f
+        fpContent.setPadding(dpi(28) + insetL, insetT, dpi(28) + insetR, insetB + dpi(8))
 
         listOf(headerPanel, topBar, bottomStack, playerBar, bottomBar, statusScrim)
             .forEach { it.requestLayout() }
@@ -1242,27 +1291,14 @@ class MainActivity : AppCompatActivity() {
             if (tracks.isNotEmpty()) playQueue(tracks, tracks.indices.random(), shuffle = true)
         }
 
-        playBtn.setOnClickListener {
-            val c = controller ?: return@setOnClickListener
-            if (c.isPlaying) c.pause() else {
-                if (c.playbackState == Player.STATE_ENDED) c.seekToDefaultPosition(0)
-                c.play()
-            }
-        }
+        playBtn.setOnClickListener { togglePlay() }
         findViewById<ImageButton>(R.id.prevBtn).setOnClickListener { controller?.seekToPrevious() }
         findViewById<ImageButton>(R.id.nextBtn).setOnClickListener { controller?.seekToNext() }
-        shuffleBtn.setOnClickListener {
-            controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
-        }
-        repeatBtn.setOnClickListener {
-            controller?.let {
-                it.repeatMode = when (it.repeatMode) {
-                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                    else -> Player.REPEAT_MODE_OFF
-                }
-            }
-        }
+        shuffleBtn.setOnClickListener { toggleShuffle() }
+        repeatBtn.setOnClickListener { cycleRepeat() }
+        // Тап по мини-плееру — большой плеер
+        playerBar.setOnClickListener { openFullPlayer() }
+        setupFullPlayer()
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
@@ -1288,6 +1324,7 @@ class MainActivity : AppCompatActivity() {
         if (c == null || item == null) {
             playerBar.visibility = View.GONE
             trackAdapter.setCurrent(null)
+            if (fullOpen) closeFullPlayer()
             return
         }
         playerBar.visibility = View.VISIBLE
@@ -1298,18 +1335,8 @@ class MainActivity : AppCompatActivity() {
         playBtn.setImageResource(if (c.isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
         playBtn.contentDescription = getString(if (c.isPlaying) R.string.pause else R.string.play)
 
-        shuffleBtn.alpha = if (c.shuffleModeEnabled) 1f else 0.35f
-        when (c.repeatMode) {
-            Player.REPEAT_MODE_ONE -> {
-                repeatBtn.setImageResource(R.drawable.ic_repeat_one); repeatBtn.alpha = 1f
-            }
-            Player.REPEAT_MODE_ALL -> {
-                repeatBtn.setImageResource(R.drawable.ic_repeat); repeatBtn.alpha = 1f
-            }
-            else -> {
-                repeatBtn.setImageResource(R.drawable.ic_repeat); repeatBtn.alpha = 0.35f
-            }
-        }
+        applyModeButtons(shuffleBtn, repeatBtn, c, accent = false)
+        updateFullPlayer()
         updateProgress()
     }
 
@@ -1323,6 +1350,317 @@ class MainActivity : AppCompatActivity() {
             seekBar.progress = c.currentPosition.toInt()
             posText.text = formatTime(c.currentPosition)
         }
+        if (fullOpen) {
+            fpSeek.max = duration.toInt()
+            fpDur.text = formatTime(duration)
+            if (!fpSeeking) {
+                fpSeek.progress = c.currentPosition.toInt()
+                fpPos.text = formatTime(c.currentPosition)
+            }
+        }
+    }
+
+    // ---------- Управление (общее для мини- и большого плеера) ----------
+
+    private fun togglePlay() {
+        val c = controller ?: return
+        if (c.isPlaying) c.pause() else {
+            if (c.playbackState == Player.STATE_ENDED) c.seekToDefaultPosition(0)
+            c.play()
+        }
+    }
+
+    private fun toggleShuffle() {
+        controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
+    }
+
+    private fun cycleRepeat() {
+        controller?.let {
+            it.repeatMode = when (it.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+        }
+    }
+
+    /** Перемешивание и повтор: включённые — ярко (в большом плеере цветом акцента). */
+    private fun applyModeButtons(shuffle: ImageButton, repeat: ImageButton, c: Player, accent: Boolean) {
+        val on = MaterialColors.getColor(shuffle, if (accent) R.attr.akkAccent else com.google.android.material.R.attr.colorOnSurface)
+        val off = MaterialColors.getColor(shuffle, com.google.android.material.R.attr.colorOnSurface)
+        shuffle.imageTintList = ColorStateList.valueOf(if (c.shuffleModeEnabled) on else off)
+        shuffle.alpha = if (c.shuffleModeEnabled) 1f else 0.35f
+        repeat.setImageResource(
+            if (c.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat
+        )
+        val repeatOn = c.repeatMode != Player.REPEAT_MODE_OFF
+        repeat.imageTintList = ColorStateList.valueOf(if (repeatOn) on else off)
+        repeat.alpha = if (repeatOn) 1f else 0.35f
+    }
+
+    // ---------- Большой плеер ----------
+
+    private fun updateBackEnabled() {
+        backCallback.isEnabled = fullOpen || screen == Screen.PLAYLIST || searchActive()
+    }
+
+    private fun setupFullPlayer() {
+        fullPlayer = findViewById(R.id.fullPlayer)
+        fpBackdrop = findViewById(R.id.fpBackdrop)
+        fpScrim = findViewById(R.id.fpScrim)
+        fpContent = findViewById(R.id.fpContent)
+        fpQueuePos = findViewById(R.id.fpQueuePos)
+        fpSleep = findViewById(R.id.fpSleep)
+        fpSleepLeft = findViewById(R.id.fpSleepLeft)
+        fpSleepIcon = findViewById(R.id.fpSleepIcon)
+        fpCoverBox = findViewById(R.id.fpCoverBox)
+        fpShadow = findViewById(R.id.fpShadow)
+        fpCoverCard = findViewById(R.id.fpCoverCard)
+        fpCover = findViewById(R.id.fpCover)
+        fpTitle = findViewById(R.id.fpTitle)
+        fpArtist = findViewById(R.id.fpArtist)
+        fpAlbum = findViewById(R.id.fpAlbum)
+        fpSeek = findViewById(R.id.fpSeek)
+        fpPos = findViewById(R.id.fpPos)
+        fpPlays = findViewById(R.id.fpPlays)
+        fpDur = findViewById(R.id.fpDur)
+        fpShuffle = findViewById(R.id.fpShuffle)
+        fpPlay = findViewById(R.id.fpPlay)
+        fpRepeat = findViewById(R.id.fpRepeat)
+
+        // Затемнение поверх размытой обложки: сверху чуть легче, снизу плотнее (там текст)
+        val surface = MaterialColors.getColor(fullPlayer, com.google.android.material.R.attr.colorSurface)
+        val rgb = surface and 0x00FFFFFF
+        fpScrim.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf((0xA6 shl 24) or rgb, (0xBF shl 24) or rgb, (0xE6 shl 24) or rgb),
+        )
+
+        fullPlayer.onDismiss = { closeFullPlayer() }
+        fullPlayer.onSettle = {
+            fullPlayer.animate().translationY(0f).setDuration(220).setInterpolator(easing).start()
+        }
+
+        // Обложка — квадрат: по ширине экрана, но не выше ~42% высоты
+        fullPlayer.addOnLayoutChangeListener { _, l, t, r, b, oldL, oldT, oldR, oldB ->
+            if (r - l == oldR - oldL && b - t == oldB - oldT) return@addOnLayoutChangeListener
+            val size = minOf(r - l - dpi(56) - insetL - insetR, ((b - t) * 0.42f).toInt()).coerceAtLeast(dpi(160))
+            fpCoverBox.layoutParams.width = size
+            fpCoverBox.layoutParams.height = size
+            fpShadow.layoutParams.width = (size * 1.75f).toInt()
+            fpShadow.layoutParams.height = (size * 1.75f).toInt()
+            fpCoverBox.post { fpCoverBox.requestLayout() }
+        }
+
+        findViewById<ImageButton>(R.id.fpClose).setOnClickListener { closeFullPlayer() }
+        fpPlay.setOnClickListener { togglePlay() }
+        findViewById<ImageButton>(R.id.fpPrev).setOnClickListener { controller?.seekToPrevious() }
+        findViewById<ImageButton>(R.id.fpNext).setOnClickListener { controller?.seekToNext() }
+        fpShuffle.setOnClickListener { toggleShuffle() }
+        fpRepeat.setOnClickListener { cycleRepeat() }
+        fpSleep.setOnClickListener { chooseSleep() }
+
+        fpSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser) fpPos.text = formatTime(progress.toLong())
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) { fpSeeking = true }
+            override fun onStopTrackingTouch(sb: SeekBar) {
+                fpSeeking = false
+                controller?.seekTo(sb.progress.toLong())
+            }
+        })
+
+        // Обложка: тап — пауза/играть, свайп влево/вправо — следующий/предыдущий
+        val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent) = true
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                togglePlay()
+                return true
+            }
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (abs(vx) > abs(vy) && abs(vx) > 600f) {
+                    skipWithSlide(if (vx < 0) 1 else -1)
+                    return true
+                }
+                return false
+            }
+        })
+        fpCoverCard.setOnTouchListener { _, ev -> gestures.onTouchEvent(ev) }
+    }
+
+    private fun openFullPlayer(animate: Boolean = true) {
+        if (fullOpen || controller?.currentMediaItem == null) return
+        fullOpen = true
+        hideKeyboard()
+        fullPlayer.visibility = View.VISIBLE
+        fullPlayer.animate().cancel()
+        updateFullPlayer()
+        updateProgress()
+        updateSleepLabel()
+        if (animate) {
+            fullPlayer.translationY = appRoot.height.toFloat().takeIf { it > 0f } ?: 2000f
+            fullPlayer.animate().translationY(0f).setDuration(340).setInterpolator(easing).start()
+        } else {
+            fullPlayer.translationY = 0f
+        }
+        fpTitle.isSelected = true // бегущая строка для длинных названий
+        updateBackEnabled()
+    }
+
+    private fun closeFullPlayer() {
+        if (!fullOpen) return
+        fullOpen = false
+        fullPlayer.animate().cancel()
+        fullPlayer.animate()
+            .translationY(fullPlayer.height.toFloat())
+            .setDuration(260).setInterpolator(easing)
+            .withEndAction { if (!fullOpen) fullPlayer.visibility = View.GONE }
+            .start()
+        updateBackEnabled()
+    }
+
+    private fun updateFullPlayer() {
+        val c = controller ?: return
+        val item = c.currentMediaItem ?: return
+        val md = item.mediaMetadata
+        fpTitle.text = md.title ?: ""
+        fpArtist.text = md.artist ?: ""
+        fpAlbum.text = md.albumTitle ?: ""
+        fpAlbum.visibility = if (md.albumTitle.isNullOrBlank()) View.GONE else View.VISIBLE
+        fpQueuePos.text = getString(R.string.fp_queue_pos, c.currentMediaItemIndex + 1, c.mediaItemCount)
+        fpPlays.text = playCounts.get(item.mediaId.toLongOrNull() ?: -1).toString()
+        fpPlay.setImageResource(if (c.isPlaying) R.drawable.ic_pause_big else R.drawable.ic_play_big)
+        fpPlay.contentDescription = getString(if (c.isPlaying) R.string.pause else R.string.play)
+        applyModeButtons(fpShuffle, fpRepeat, c, accent = true)
+
+        // На паузе обложка чуть отъезжает назад
+        val scale = if (c.playWhenReady) 1f else 0.86f
+        if (scale != fpCoverScale) {
+            fpCoverScale = scale
+            for (v in listOf(fpCoverCard, fpShadow)) {
+                v.animate().scaleX(scale).scaleY(scale)
+                    .setDuration(420).setInterpolator(OvershootInterpolator(1.2f)).start()
+            }
+        }
+
+        if (item.mediaId != fpLoadedId) {
+            fpLoadedId = item.mediaId
+            loadCover(item.mediaId)
+        }
+    }
+
+    private fun loadCover(mediaId: String) {
+        val id = mediaId.toLongOrNull() ?: return
+        val albumId = trackById[id]?.albumId
+        ioExecutor.execute {
+            val art = CoverArt.load(applicationContext, id, albumId)
+            val glow = art?.let { Backdrop.glow(it) }
+            val back = art?.let { Backdrop.blurForBackdrop(it) }
+            runOnUiThread {
+                if (isDestroyed || fpLoadedId != mediaId) return@runOnUiThread
+                applyCover(art, glow, back)
+            }
+        }
+    }
+
+    private fun applyCover(art: Bitmap?, glow: Bitmap?, back: Bitmap?) {
+        if (art != null) {
+            fpCover.background = null
+            fpCover.imageTintList = null
+            fpCover.scaleType = ImageView.ScaleType.CENTER_CROP
+            fpCover.setImageBitmap(art)
+            fpShadow.setImageBitmap(glow)
+            fpBackdrop.setImageBitmap(back)
+        } else {
+            // Обложки нет: градиент акцента с большой нотой
+            val accent = MaterialColors.getColor(fpCover, R.attr.akkAccent)
+            val container = MaterialColors.getColor(fpCover, R.attr.akkOnAccent)
+            fpCover.background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR, intArrayOf(accent, blend(accent, container, 0.55f))
+            )
+            fpCover.imageTintList = ColorStateList.valueOf(container)
+            fpCover.scaleType = ImageView.ScaleType.CENTER
+            fpCover.setImageResource(R.drawable.ic_music_big)
+            val g = placeholderGlow ?: Backdrop.glow(
+                Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(accent) }
+            ).also { placeholderGlow = it }
+            fpShadow.setImageBitmap(g)
+            fpBackdrop.setImageBitmap(bgBlur)
+        }
+        fpCover.alpha = 0f
+        fpCover.animate().alpha(1f).setDuration(220).start()
+    }
+
+    private fun blend(a: Int, b: Int, t: Float): Int {
+        fun ch(x: Int, y: Int) = (x + (y - x) * t).toInt()
+        return Color.rgb(
+            ch(Color.red(a), Color.red(b)), ch(Color.green(a), Color.green(b)), ch(Color.blue(a), Color.blue(b))
+        )
+    }
+
+    /** Обложка уезжает в сторону свайпа, трек переключается, новая въезжает с другой стороны. */
+    private fun skipWithSlide(dir: Int) {
+        val c = controller ?: return
+        val shift = fpCoverBox.width * 0.5f
+        fpCoverBox.animate().translationX(-dir * shift).alpha(0f).setDuration(140)
+            .setInterpolator(easing)
+            .withEndAction {
+                if (dir > 0) c.seekToNext() else c.seekToPrevious()
+                fpCoverBox.translationX = dir * shift
+                fpCoverBox.animate().translationX(0f).alpha(1f).setDuration(220)
+                    .setInterpolator(easing).start()
+            }
+            .start()
+    }
+
+    // ---------- Таймер сна ----------
+
+    private fun sleepAt(): Long? {
+        val prefs = getSharedPreferences(PlaybackService.SLEEP_PREFS, Context.MODE_PRIVATE)
+        return if (prefs.contains(PlaybackService.KEY_SLEEP_AT)) prefs.getLong(PlaybackService.KEY_SLEEP_AT, 0) else null
+    }
+
+    private fun updateSleepLabel() {
+        val at = sleepAt()
+        val left: String? = when {
+            at == null -> null
+            at == PlaybackService.SLEEP_END_OF_TRACK -> getString(R.string.sleep_left_end)
+            at > System.currentTimeMillis() ->
+                "${ceil((at - System.currentTimeMillis()) / 60_000.0).toInt()} мин"
+            else -> null
+        }
+        fpSleepLeft.text = left ?: ""
+        fpSleepLeft.visibility = if (left == null) View.GONE else View.VISIBLE
+        fpSleepIcon.imageTintList = ColorStateList.valueOf(
+            MaterialColors.getColor(
+                fpSleepIcon,
+                if (left == null) com.google.android.material.R.attr.colorOnSurface else R.attr.akkAccentText
+            )
+        )
+    }
+
+    private fun chooseSleep() {
+        val active = sleepAt() != null
+        val options = mutableListOf<Pair<String, Int>>()
+        if (active) options += getString(R.string.sleep_off) to -1
+        for (m in listOf(15, 30, 45, 60, 90)) options += getString(R.string.sleep_minutes, m) to m
+        options += getString(R.string.sleep_end_of_track) to 0
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.sleep_timer)
+            .setItems(options.map { it.first }.toTypedArray()) { _, which ->
+                val minutes = options[which].second
+                controller?.sendCustomCommand(
+                    SessionCommand(PlaybackService.CMD_SLEEP, Bundle.EMPTY),
+                    Bundle().apply { putInt(PlaybackService.ARG_MINUTES, minutes) },
+                )
+                when {
+                    minutes > 0 -> Toast.makeText(this, getString(R.string.sleep_set, minutes), Toast.LENGTH_SHORT).show()
+                    minutes == 0 -> Toast.makeText(this, R.string.sleep_set_end, Toast.LENGTH_SHORT).show()
+                }
+                fpSleep.postDelayed({ updateSleepLabel() }, 300)
+            }
+            .show()
     }
 
     companion object {
@@ -1338,5 +1676,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_HEADER_SEARCH = "header_search"
         private const val KEY_PENDING_COVER = "pending_cover"
         private const val KEY_SETTINGS_OPEN = "settings_open"
+        private const val KEY_FULL_OPEN = "full_open"
     }
 }

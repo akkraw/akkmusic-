@@ -457,4 +457,7 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Большой плеер поверх всего -->
+    <include layout="@layout/view_full_player" />
 </FrameLayout>

@@ -75,4 +75,15 @@
     <string name="settings_accent">Акцент</string>
     <string name="settings_accent_sub">Кнопки, подсветка, ползунки и все цветные детали</string>
     <string name="settings_text_color">Текст</string>
+    <string name="fp_close">Свернуть</string>
+    <string name="fp_now_playing">Сейчас играет</string>
+    <string name="fp_cover">Обложка</string>
+    <string name="fp_queue_pos">%1$d из %2$d</string>
+    <string name="sleep_timer">Таймер сна</string>
+    <string name="sleep_off">Выключить таймер</string>
+    <string name="sleep_minutes">Через %d минут</string>
+    <string name="sleep_end_of_track">В конце трека</string>
+    <string name="sleep_set">Музыка остановится через %d мин</string>
+    <string name="sleep_set_end">Музыка остановится в конце трека</string>
+    <string name="sleep_left_end">трек</string>
 </resources>
