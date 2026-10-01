@@ -613,6 +613,7 @@ class MainActivity : AppCompatActivity() {
         sortFab.visibility =
             if (screen == Screen.TRACKS && !showHeader) View.VISIBLE else View.GONE
         statusScrim.visibility = if (headerVisible()) View.GONE else View.VISIBLE
+        list.invalidateItemDecorations()
         list.post { updateListPadding() }
     }
 
@@ -633,7 +634,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         (sortFab.layoutParams as FrameLayout.LayoutParams).setMargins(
-            0, insetT + dpi(8), dpi(12) + insetR, 0
+            0, insetT + dpi(4) + dpi(12), dpi(12) + insetR, 0
         )
         statusScrim.layoutParams.height = insetT + dpi(24)
 
@@ -670,8 +671,7 @@ class MainActivity : AppCompatActivity() {
         val gap = if (roundedStyle) dpi(4) else 0
         val top = when {
             headerPanel.visibility == View.VISIBLE -> headerPanel.bottom + gap
-            sortFab.visibility == View.VISIBLE -> insetT + dpi(60)
-            else -> insetT + dpi(8)
+            else -> insetT + dpi(4)
         }
         val bottom = (appRoot.height - bottomStack.top).coerceAtLeast(0) + gap
         if (list.paddingTop != top || list.paddingBottom != bottom) {
@@ -988,6 +988,20 @@ class MainActivity : AppCompatActivity() {
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
+        list.addItemDecoration(object : RecyclerView.ItemDecoration() {
+            override fun getItemOffsets(
+                outRect: android.graphics.Rect, view: View,
+                parent: RecyclerView, state: RecyclerView.State,
+            ) {
+                // Без шапки в правом верхнем углу кнопка сортировки: первая строка
+                // заканчивается перед ней, а не прячет под ней время трека
+                if (sortFab.visibility == View.VISIBLE &&
+                    parent.getChildAdapterPosition(view) == 0
+                ) {
+                    outRect.right = dpi(48)
+                }
+            }
+        })
 
         navTracks.setOnClickListener {
             if (screen != Screen.TRACKS) showScreen(Screen.TRACKS)
