@@ -6,6 +6,24 @@
         <item name="colorSurface">@color/bg</item>
         <item name="android:colorBackground">@color/bg</item>
         <item name="colorSecondaryContainer">@color/accent_container</item>
+        <!-- Моноширинный шрифт JetBrains Mono во всём приложении -->
+        <item name="android:fontFamily">@font/app_font</item>
+        <item name="fontFamily">@font/app_font</item>
+        <item name="textAppearanceDisplayLarge">@style/TextAppearance.AkkMusic.DisplayLarge</item>
+        <item name="textAppearanceDisplayMedium">@style/TextAppearance.AkkMusic.DisplayMedium</item>
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.AkkMusic.DisplaySmall</item>
+        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.AkkMusic.HeadlineLarge</item>
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.AkkMusic.HeadlineMedium</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.AkkMusic.HeadlineSmall</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.AkkMusic.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.AkkMusic.TitleMedium</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.AkkMusic.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.AkkMusic.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.AkkMusic.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.AkkMusic.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.AkkMusic.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.AkkMusic.LabelMedium</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.AkkMusic.LabelSmall</item>
     </style>
 
     <style name="PlayerButton">
@@ -52,5 +70,100 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <!-- Типографика -->
+    <style name="TextAppearance.AkkMusic.DisplayLarge" parent="TextAppearance.Material3.DisplayLarge">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.DisplayMedium" parent="TextAppearance.Material3.DisplayMedium">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.DisplaySmall" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.HeadlineLarge" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.HeadlineMedium" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textSize">26sp</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:fontFamily">@font/app_font_bold</item>
+        <item name="fontFamily">@font/app_font_bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.TitleSmall" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/app_font</item>
+        <item name="fontFamily">@font/app_font</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:fontFamily">@font/app_font</item>
+        <item name="fontFamily">@font/app_font</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:fontFamily">@font/app_font</item>
+        <item name="fontFamily">@font/app_font</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.LabelLarge" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.LabelMedium" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.AkkMusic.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:fontFamily">@font/app_font_medium</item>
+        <item name="fontFamily">@font/app_font_medium</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 </resources>
