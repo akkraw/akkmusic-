@@ -16,7 +16,11 @@ data class Track(
     val album: String,
     val albumId: Long,
     val durationMs: Long,
+    /** Название из файла до переименования в приложении (для поиска и сброса). */
+    val originalTitle: String = title,
 ) {
+    val renamed: Boolean get() = title != originalTitle
+
     val artworkUri: Uri
         get() = ContentUris.withAppendedId(ALBUM_ART_BASE, albumId)
 
@@ -47,7 +51,9 @@ data class Track(
  */
 object MusicLibrary {
 
-    fun load(context: Context): List<Track> {
+    fun load(context: Context, edits: TrackEdits? = null): List<Track> {
+        val hidden = edits?.hiddenIds() ?: emptySet()
+        val overrides = edits?.overrides() ?: emptyMap()
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         } else {
@@ -79,16 +85,19 @@ object MusicLibrary {
 
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
+                    if (id in hidden) continue // «удалённые» из приложения не показываем
+                    val original = c.getString(titleCol).orUnknown("Без названия")
                     tracks += Track(
                         id = id,
                         uri = ContentUris.withAppendedId(
                             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
                         ),
-                        title = c.getString(titleCol).orUnknown("Без названия"),
+                        title = overrides[id] ?: original,
                         artist = c.getString(artistCol).orUnknown("Неизвестный исполнитель"),
                         album = c.getString(albumCol).orUnknown("Неизвестный альбом"),
                         albumId = c.getLong(albumIdCol),
                         durationMs = c.getLong(durationCol),
+                        originalTitle = original,
                     )
                 }
             }

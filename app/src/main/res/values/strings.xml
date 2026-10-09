@@ -86,4 +86,12 @@
     <string name="sleep_set">Музыка остановится через %d мин</string>
     <string name="sleep_set_end">Музыка остановится в конце трека</string>
     <string name="sleep_left_end">трек</string>
+    <string name="reset_name">Вернуть исходное название</string>
+    <string name="remove_from_app">Убрать из приложения</string>
+    <string name="track_hidden">«%s» убран. Вернуть можно в настройках</string>
+    <string name="settings_library">Библиотека</string>
+    <string name="removed_tracks">Удалённые треки</string>
+    <string name="removed_tracks_n">Удалённые треки (%d)</string>
+    <string name="restore">Вернуть</string>
+    <string name="restore_all">Вернуть все</string>
 </resources>

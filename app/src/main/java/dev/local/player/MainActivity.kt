@@ -190,6 +190,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- Данные и состояние экрана ----------
     private lateinit var playlists: PlaylistStore
     private lateinit var playCounts: PlayCounts
+    private lateinit var trackEdits: TrackEdits
     private lateinit var uiPrefs: SharedPreferences
     private var trackSort = TrackSort.ARTIST
 
@@ -344,6 +345,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         playlists = PlaylistStore(applicationContext)
         playCounts = PlayCounts(applicationContext)
+        trackEdits = TrackEdits(applicationContext)
         uiPrefs = getSharedPreferences("ui", Context.MODE_PRIVATE)
         trackSort = TrackSort.fromName(uiPrefs.getString(KEY_SORT, null))
         showHeader = uiPrefs.getBoolean(KEY_HEADER, true)
@@ -451,7 +453,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadLibrary() {
         ioExecutor.execute {
-            val loaded = MusicLibrary.load(applicationContext)
+            val loaded = MusicLibrary.load(applicationContext, trackEdits)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 library = loaded
@@ -734,7 +736,8 @@ class MainActivity : AppCompatActivity() {
         val q = norm(query.trim())
         if (q.isEmpty()) return list
         return list.filter {
-            norm(it.title).contains(q) || norm(it.artist).contains(q) || norm(it.album).contains(q)
+            norm(it.title).contains(q) || norm(it.originalTitle).contains(q) ||
+                norm(it.artist).contains(q) || norm(it.album).contains(q)
         }
     }
 
@@ -915,6 +918,7 @@ class MainActivity : AppCompatActivity() {
         val removeBtn = v.findViewById<Button>(R.id.bgRemoveBtn)
         val dimBlock = v.findViewById<View>(R.id.bgDimBlock)
         val slider = v.findViewById<Slider>(R.id.bgDimSlider)
+        val removedBtn = v.findViewById<Button>(R.id.removedTracksBtn)
         val hasBg = bgSharp != null
         v.setPadding(0, 0, 0, insetB)
 
@@ -961,6 +965,16 @@ class MainActivity : AppCompatActivity() {
         slider.setLabelFormatter { "${it.toInt()}%" }
         slider.addOnChangeListener { _, value, _ -> updateDim(value.toInt()) }
 
+        // Удалённые треки
+        fun refreshRemovedBtn() {
+            val n = trackEdits.hiddenCount()
+            removedBtn.text = if (n == 0) getString(R.string.removed_tracks)
+                else getString(R.string.removed_tracks_n, n)
+            removedBtn.isEnabled = n > 0
+        }
+        refreshRemovedBtn()
+        removedBtn.setOnClickListener { showRemovedTracks { refreshRemovedBtn() } }
+
         val sheet = BottomSheetDialog(this)
         settingsSheet = sheet
         sheet.setContentView(v)
@@ -995,6 +1009,31 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { if (!isDestroyed) recreate() }
             }
         }
+    }
+
+    /** Список «удалённых» треков с галочками: отмеченные возвращаются в библиотеку. */
+    private fun showRemovedTracks(onChanged: () -> Unit) {
+        val entries = trackEdits.hiddenLabels().entries
+            .sortedBy { it.value.lowercase() }
+        if (entries.isEmpty()) return
+        val ids = entries.map { it.key }
+        val labels = entries.map { it.value.ifBlank { it.key.toString() } }.toTypedArray()
+        val checked = BooleanArray(entries.size)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.removed_tracks)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setNeutralButton(R.string.restore_all) { _, _ ->
+                trackEdits.restoreAll()
+                reloadLibrary()
+                onChanged()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.restore) { _, _ ->
+                ids.filterIndexed { i, _ -> checked[i] }.forEach { trackEdits.restore(it) }
+                reloadLibrary()
+                onChanged()
+            }
+            .show()
     }
 
     /** Ряд цветных кружков; выбранный обведён кольцом. */
@@ -1062,26 +1101,55 @@ class MainActivity : AppCompatActivity() {
     // ---------- Плейлисты: действия ----------
 
     private fun onTrackLongClick(track: Track) {
-        if (screen != Screen.PLAYLIST) {
-            chooseTargetPlaylist(track)
-            return
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += getString(R.string.rename) to { renameTrack(track) }
+        if (track.renamed) {
+            actions += getString(R.string.reset_name) to {
+                trackEdits.clearTitle(track.id)
+                reloadLibrary()
+            }
         }
-        val options = arrayOf(
-            getString(R.string.remove_from_playlist),
-            getString(R.string.add_to_playlist),
-        )
+        actions += getString(R.string.add_to_playlist) to { chooseTargetPlaylist(track) }
+        if (screen == Screen.PLAYLIST) {
+            actions += getString(R.string.remove_from_playlist) to {
+                playlists.removeTrack(openPlaylistId, track.id)
+                render()
+            }
+        }
+        actions += getString(R.string.remove_from_app) to { hideTrack(track) }
         MaterialAlertDialogBuilder(this)
             .setTitle(track.title)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        playlists.removeTrack(openPlaylistId, track.id)
-                        render()
-                    }
-                    1 -> chooseTargetPlaylist(track)
-                }
-            }
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
             .show()
+    }
+
+    /** Переименование: переопределяет название в приложении, файл не трогается. */
+    private fun renameTrack(track: Track) {
+        askName(R.string.rename, track.title, R.string.save) { name ->
+            trackEdits.rename(track.id, name, track.originalTitle)
+            reloadLibrary()
+        }
+    }
+
+    /** «Удаление» из приложения: трек прячется из списков и плейлистов, файл остаётся. */
+    private fun hideTrack(track: Track) {
+        trackEdits.hide(track.id, "${track.artist} · ${track.title}")
+        reloadLibrary()
+        Toast.makeText(this, getString(R.string.track_hidden, track.title), Toast.LENGTH_SHORT).show()
+    }
+
+    /** Перечитать медиатеку с учётом правок и обновить экран. */
+    private fun reloadLibrary() {
+        if (!libraryLoaded) return
+        ioExecutor.execute {
+            val loaded = MusicLibrary.load(applicationContext, trackEdits)
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                library = loaded
+                trackById = loaded.associateBy { it.id }
+                render()
+            }
+        }
     }
 
     /** Диалог «Добавить в плейлист»: список плейлистов + создание нового. */

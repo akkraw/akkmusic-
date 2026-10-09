@@ -207,5 +207,17 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="-12dp"
             android:text="@string/bg_remove" />
+
+        <!-- Удалённые треки -->
+        <TextView
+            style="@style/SettingsSection"
+            android:text="@string/settings_library" />
+
+        <Button
+            android:id="@+id/removedTracksBtn"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/removed_tracks" />
     </LinearLayout>
 </ScrollView>
