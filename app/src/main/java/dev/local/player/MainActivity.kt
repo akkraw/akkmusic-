@@ -52,6 +52,9 @@ import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -191,6 +194,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playlists: PlaylistStore
     private lateinit var playCounts: PlayCounts
     private lateinit var trackEdits: TrackEdits
+    private lateinit var serverSettings: ServerSettings
     private lateinit var uiPrefs: SharedPreferences
     private var trackSort = TrackSort.ARTIST
 
@@ -294,7 +298,8 @@ class MainActivity : AppCompatActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            if (hasAudioPermission()) loadLibrary() else render()
+            // Без доступа к файлам всё равно грузим: сервер его не требует
+            loadLibrary()
         }
 
     private val progressTick = object : Runnable {
@@ -346,6 +351,7 @@ class MainActivity : AppCompatActivity() {
         playlists = PlaylistStore(applicationContext)
         playCounts = PlayCounts(applicationContext)
         trackEdits = TrackEdits(applicationContext)
+        serverSettings = ServerSettings(applicationContext)
         uiPrefs = getSharedPreferences("ui", Context.MODE_PRIVATE)
         trackSort = TrackSort.fromName(uiPrefs.getString(KEY_SORT, null))
         showHeader = uiPrefs.getBoolean(KEY_HEADER, true)
@@ -374,7 +380,8 @@ class MainActivity : AppCompatActivity() {
         }
         syncBottomNav(animate = false)
 
-        if (hasAudioPermission()) loadLibrary() else requestPermissions()
+        if (serverSettings.source.usesPhone && !hasAudioPermission()) requestPermissions()
+        else loadLibrary()
         render()
 
         // После смены цвета экран пересоздаётся — возвращаем открытые настройки
@@ -451,6 +458,11 @@ class MainActivity : AppCompatActivity() {
         permissionLauncher.launch(perms.toTypedArray())
     }
 
+    private fun showServerError() {
+        val err = MusicLibrary.serverError ?: return
+        Toast.makeText(this, getString(R.string.server_error, err), Toast.LENGTH_LONG).show()
+    }
+
     private fun loadLibrary() {
         ioExecutor.execute {
             val loaded = MusicLibrary.load(applicationContext, trackEdits)
@@ -461,6 +473,7 @@ class MainActivity : AppCompatActivity() {
                 libraryLoaded = true
                 render()
                 updatePlayerUi()
+                showServerError()
             }
         }
     }
@@ -640,11 +653,16 @@ class MainActivity : AppCompatActivity() {
                 list.adapter = trackAdapter
                 trackAdapter.submit(shown)
                 when {
-                    !hasAudioPermission() -> {
+                    serverSettings.source == LibrarySource.PHONE && !hasAudioPermission() -> {
                         emptyMessage = R.string.need_permission
                         grantButton.visibility = View.VISIBLE
                     }
-                    libraryLoaded && library.isEmpty() -> emptyMessage = R.string.no_tracks
+                    libraryLoaded && library.isEmpty() && MusicLibrary.serverError != null -> {
+                        emptyMessage = R.string.server_unavailable
+                    }
+                    libraryLoaded && library.isEmpty() -> emptyMessage =
+                        if (serverSettings.source == LibrarySource.SERVER) R.string.no_tracks_server
+                        else R.string.no_tracks
                     libraryLoaded && shown.isEmpty() -> emptyMessage = R.string.search_empty
                 }
             }
@@ -922,6 +940,46 @@ class MainActivity : AppCompatActivity() {
         val hasBg = bgSharp != null
         v.setPadding(0, 0, 0, insetB)
 
+        // Источник музыки: телефон / сервер / всё вместе
+        val sourceGroup = v.findViewById<MaterialButtonToggleGroup>(R.id.sourceGroup)
+        val serverHint = v.findViewById<TextView>(R.id.serverHint)
+        val serverBtn = v.findViewById<Button>(R.id.serverBtn)
+        fun refreshServer() {
+            serverHint.text = if (serverSettings.configured) {
+                val host = java.net.URI(serverSettings.url).host ?: serverSettings.url
+                getString(R.string.server_connected, host, serverSettings.user)
+            } else getString(R.string.server_none)
+            serverBtn.setText(if (serverSettings.configured) R.string.server_change else R.string.server_connect)
+            sourceGroup.check(sourceButtonId(serverSettings.source))
+        }
+        refreshServer()
+        sourceGroup.addOnButtonCheckedListener { _, id, checked ->
+            if (!checked) return@addOnButtonCheckedListener
+            val src = when (id) {
+                R.id.sourceServer -> LibrarySource.SERVER
+                R.id.sourceAll -> LibrarySource.ALL
+                else -> LibrarySource.PHONE
+            }
+            if (src == serverSettings.source) return@addOnButtonCheckedListener
+            if (src.usesServer && !serverSettings.configured) {
+                // Без сервера переключаться не на что — сначала подключаем
+                sourceGroup.check(sourceButtonId(serverSettings.source))
+                Toast.makeText(this, R.string.server_need_connect, Toast.LENGTH_SHORT).show()
+                showServerDialog {
+                    setSource(src)
+                    refreshServer()
+                }
+                return@addOnButtonCheckedListener
+            }
+            setSource(src)
+        }
+        serverBtn.setOnClickListener {
+            showServerDialog(onForget = { refreshServer() }) {
+                if (!serverSettings.source.usesServer) setSource(LibrarySource.ALL) else loadLibrary()
+                refreshServer()
+            }
+        }
+
         // Шапка — применяется сразу
         headerSwitch.isChecked = showHeader
         headerSwitch.setOnCheckedChangeListener { _, checked ->
@@ -1007,6 +1065,86 @@ class MainActivity : AppCompatActivity() {
             ioExecutor.execute {
                 Backdrop.remove(applicationContext)
                 runOnUiThread { if (!isDestroyed) recreate() }
+            }
+        }
+    }
+
+    private fun sourceButtonId(src: LibrarySource): Int = when (src) {
+        LibrarySource.PHONE -> R.id.sourcePhone
+        LibrarySource.SERVER -> R.id.sourceServer
+        LibrarySource.ALL -> R.id.sourceAll
+    }
+
+    private fun setSource(src: LibrarySource) {
+        serverSettings.source = src
+        if (src.usesPhone && !hasAudioPermission()) requestPermissions() else loadLibrary()
+    }
+
+    /**
+     * Адрес, логин и пароль сервера. Сохраняем только после успешной проверки (ping),
+     * диалог при ошибке не закрывается.
+     */
+    private fun showServerDialog(onForget: () -> Unit = {}, onSaved: () -> Unit) {
+        val v = layoutInflater.inflate(R.layout.dialog_server, null)
+        val urlLayout = v.findViewById<TextInputLayout>(R.id.urlLayout)
+        val passLayout = v.findViewById<TextInputLayout>(R.id.passLayout)
+        val urlInput = v.findViewById<TextInputEditText>(R.id.urlInput)
+        val userInput = v.findViewById<TextInputEditText>(R.id.userInput)
+        val passInput = v.findViewById<TextInputEditText>(R.id.passInput)
+        val old = serverSettings.client()
+        urlInput.setText(serverSettings.url)
+        userInput.setText(serverSettings.user)
+        if (old != null) passLayout.hint = getString(R.string.server_password_keep)
+
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.server_title)
+            .setView(v)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save, null)
+        if (old != null) {
+            builder.setNeutralButton(R.string.server_forget) { _, _ ->
+                serverSettings.forget()
+                loadLibrary()
+                onForget()
+            }
+        }
+        val dialog = builder.show()
+        val saveBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        saveBtn.setOnClickListener {
+            val url = urlInput.text.toString().trim()
+            val user = userInput.text.toString().trim()
+            val pass = passInput.text.toString()
+            if (url.isEmpty() || user.isEmpty()) return@setOnClickListener
+            // Пустой пароль при том же логине — оставляем сохранённый токен
+            val client = if (pass.isEmpty() && old != null && user == old.user) {
+                NavidromeClient(url, user, old.token, old.salt)
+            } else {
+                if (pass.isEmpty()) return@setOnClickListener
+                NavidromeClient.withPassword(url, user, pass)
+            }
+            urlLayout.error = null
+            saveBtn.isEnabled = false
+            saveBtn.setText(R.string.server_checking)
+            ioExecutor.execute {
+                val error = try {
+                    client.ping()
+                    null
+                } catch (e: ServerException) {
+                    e.message
+                }
+                runOnUiThread {
+                    if (isDestroyed || !dialog.isShowing) return@runOnUiThread
+                    saveBtn.isEnabled = true
+                    saveBtn.setText(R.string.save)
+                    if (error != null) {
+                        urlLayout.error = error
+                    } else {
+                        serverSettings.save(client)
+                        dialog.dismiss()
+                        Toast.makeText(this, R.string.server_ok, Toast.LENGTH_SHORT).show()
+                        onSaved()
+                    }
+                }
             }
         }
     }
@@ -1620,9 +1758,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadCover(mediaId: String) {
         val id = mediaId.toLongOrNull() ?: return
-        val albumId = trackById[id]?.albumId
+        val track = trackById[id]
         ioExecutor.execute {
-            val art = CoverArt.load(applicationContext, id, albumId)
+            val art = track?.remoteCoverUrl?.let { CoverArt.loadUrl(it) }
+                ?: if (track?.isRemote == true) null
+                else CoverArt.load(applicationContext, id, track?.albumId)
             val glow = art?.let { Backdrop.glow(it) }
             val back = art?.let { Backdrop.blurForBackdrop(it) }
             runOnUiThread {

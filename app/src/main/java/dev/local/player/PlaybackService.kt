@@ -154,8 +154,9 @@ class PlaybackService : MediaSessionService() {
             )
             // Пауза, когда отключаются наушники
             .setHandleAudioBecomingNoisy(true)
-            // Не даём процессору уснуть посреди трека при выключенном экране
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            // Не даём процессору и Wi-Fi уснуть посреди трека при выключенном экране
+            // (Wi-Fi нужен для музыки с сервера)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
         playCounts = PlayCounts(this)

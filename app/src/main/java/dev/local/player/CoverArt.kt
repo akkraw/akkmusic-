@@ -16,6 +16,26 @@ import android.util.Size
  */
 object CoverArt {
 
+    /** Обложка с сервера: качаем и уменьшаем до нужного размера. */
+    fun loadUrl(url: String, size: Int = 800): Bitmap? = try {
+        val bytes = java.net.URL(url).openConnection().run {
+            connectTimeout = 10_000
+            readTimeout = 20_000
+            getInputStream().use { it.readBytes() }
+        }
+        decodeScaled(bytes, size)
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun decodeScaled(bytes: ByteArray, size: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    }
+
     fun load(ctx: Context, trackId: Long, albumId: Long?, size: Int = 800): Bitmap? {
         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, trackId)
 
@@ -39,13 +59,7 @@ object CoverArt {
         val r = MediaMetadataRetriever()
         return try {
             r.setDataSource(ctx, uri)
-            r.embeddedPicture?.let { bytes ->
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                var sample = 1
-                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-            }
+            r.embeddedPicture?.let { decodeScaled(it, size) }
         } catch (_: Exception) {
             null
         } finally {

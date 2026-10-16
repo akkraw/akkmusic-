@@ -1,12 +1,17 @@
 package dev.local.player
 
+import android.Manifest
 import android.content.ContentUris
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.media3.common.MediaItem
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaMetadata
+import java.text.Collator
+import java.util.Locale
 
 data class Track(
     val id: Long,
@@ -18,11 +23,19 @@ data class Track(
     val durationMs: Long,
     /** Название из файла до переименования в приложении (для поиска и сброса). */
     val originalTitle: String = title,
+    /** Номер в альбоме (диск * 1000 + трек) — для сортировки общего списка. */
+    val trackNo: Int = 0,
+    /** Обложка с сервера; null — трек с телефона. */
+    val remoteCoverUrl: String? = null,
 ) {
     val renamed: Boolean get() = title != originalTitle
 
+    /** Трек с сервера Navidrome (id отрицательные, см. NavidromeClient.localId). */
+    val isRemote: Boolean get() = id < 0
+
     val artworkUri: Uri
-        get() = ContentUris.withAppendedId(ALBUM_ART_BASE, albumId)
+        get() = remoteCoverUrl?.let { Uri.parse(it) }
+            ?: ContentUris.withAppendedId(ALBUM_ART_BASE, albumId)
 
     fun toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.toString())
@@ -46,12 +59,66 @@ data class Track(
 }
 
 /**
- * Библиотека берётся из MediaStore — системного индекса медиафайлов.
- * Сам диск не сканируем: это медленно и упирается в ограничения scoped storage.
+ * Библиотека: треки с телефона (MediaStore) и/или с сервера Navidrome —
+ * смотря что выбрано в настройках. Тяжёлая работа — не на главном потоке.
  */
 object MusicLibrary {
 
+    /** Ошибка сервера при последней загрузке (null — всё хорошо или сервер не используется). */
+    @Volatile
+    var serverError: String? = null
+        private set
+
+    private val collator: Collator = Collator.getInstance(Locale("ru")).apply {
+        strength = Collator.SECONDARY
+    }
+
     fun load(context: Context, edits: TrackEdits? = null): List<Track> {
+        val settings = ServerSettings(context)
+        val source = settings.source
+        val local = if (source.usesPhone && hasAudioPermission(context)) loadLocal(context, edits)
+            else emptyList()
+
+        serverError = null
+        if (!source.usesServer) return local
+        val client = settings.client() ?: run {
+            serverError = "Сервер не подключён"
+            return local
+        }
+        val remote = try {
+            applyEdits(client.songs(), edits)
+        } catch (e: ServerException) {
+            serverError = e.message
+            emptyList()
+        }
+        // Общий список: исполнитель → альбом → номер трека, как у локальной медиатеки
+        return sortByArtist(local + remote)
+    }
+
+    private fun sortByArtist(tracks: List<Track>): List<Track> = tracks.sortedWith(
+        Comparator<Track> { a, b -> collator.compare(a.artist, b.artist) }
+            .then { a, b -> collator.compare(a.album, b.album) }
+            .thenBy { it.trackNo }
+    )
+
+    private fun applyEdits(tracks: List<Track>, edits: TrackEdits?): List<Track> {
+        if (edits == null) return tracks
+        val hidden = edits.hiddenIds()
+        val overrides = edits.overrides()
+        return tracks.filter { it.id !in hidden }
+            .map { t -> overrides[t.id]?.let { t.copy(title = it) } ?: t }
+    }
+
+    fun hasAudioPermission(context: Context): Boolean {
+        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun loadLocal(context: Context, edits: TrackEdits?): List<Track> {
         val hidden = edits?.hiddenIds() ?: emptySet()
         val overrides = edits?.overrides() ?: emptyMap()
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -67,6 +134,7 @@ object MusicLibrary {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.TRACK,
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.ARTIST} COLLATE NOCASE, " +
@@ -82,6 +150,7 @@ object MusicLibrary {
                 val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val albumIdCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val trackCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
 
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
@@ -98,6 +167,7 @@ object MusicLibrary {
                         albumId = c.getLong(albumIdCol),
                         durationMs = c.getLong(durationCol),
                         originalTitle = original,
+                        trackNo = c.getInt(trackCol),
                     )
                 }
             }
