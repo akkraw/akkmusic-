@@ -96,19 +96,24 @@ fun SettingsDialog(
     engine: PlayerEngine,
     accentKey: String,
     textKey: String,
+    fontKey: String,
     bgPath: String?,
     bgDim: Int,
+    bgBlur: Int,
     onSource: (LibrarySource) -> Unit,
     onFolder: (String?) -> Unit,
     onServerChanged: () -> Unit,
     onAccent: (String) -> Unit,
     onText: (String) -> Unit,
+    onFont: (String) -> Unit,
     onBg: (String?) -> Unit,
     onDim: (Int) -> Unit,
+    onBlur: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     var showServer by remember { mutableStateOf(false) }
     var dim by remember { mutableStateOf(bgDim.toFloat()) }
+    var blur by remember { mutableStateOf(bgBlur.toFloat()) }
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -161,6 +166,20 @@ fun SettingsDialog(
                 Text("Цвет текста", style = MaterialTheme.typography.labelLarge)
                 SwatchRow(TEXTS, textKey, onText)
 
+                // Шрифт
+                Spacer(Modifier.height(4.dp))
+                Text("Шрифт", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    Fonts.choices.forEachIndexed { i, c ->
+                        SegmentedButton(
+                            selected = fontKey == c.key,
+                            onClick = { onFont(c.key) },
+                            shape = SegmentedButtonDefaults.itemShape(i, Fonts.choices.size),
+                        ) { Text(c.label) }
+                    }
+                }
+
                 // Фон
                 Spacer(Modifier.height(12.dp))
                 Text("Фон", style = MaterialTheme.typography.labelLarge)
@@ -180,6 +199,13 @@ fun SettingsDialog(
                         value = dim,
                         onValueChange = { dim = it; onDim(it.toInt()) },
                         valueRange = 0f..90f, steps = 17,
+                    )
+                    Text("Размытие", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(
+                        value = blur,
+                        onValueChange = { blur = it; onBlur(it.toInt()) },
+                        valueRange = 0f..40f, steps = 39,
                     )
                 }
 

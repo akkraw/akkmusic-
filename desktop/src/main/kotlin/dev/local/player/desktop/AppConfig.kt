@@ -92,6 +92,14 @@ object AppConfig {
         get() = (get("bgDim")?.toIntOrNull() ?: 55).coerceIn(0, 90)
         set(v) = set("bgDim", v.coerceIn(0, 90).toString())
 
+    var bgBlur: Int
+        get() = (get("bgBlur")?.toIntOrNull() ?: 0).coerceIn(0, 40)
+        set(v) = set("bgBlur", v.coerceIn(0, 40).toString())
+
+    var font: String?
+        get() = get("font")
+        set(v) = set("font", v)
+
     var volume: Int
         get() = get("volume")?.toIntOrNull() ?: 80
         set(v) = set("volume", v.coerceIn(0, 100).toString())

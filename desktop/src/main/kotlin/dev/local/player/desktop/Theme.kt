@@ -1,11 +1,14 @@
 package dev.local.player.desktop
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 
 /** Цветной образец для выбора акцента и цвета текста. */
 data class Swatch(val key: String, val label: String, val color: Color)
@@ -46,7 +49,13 @@ private val BgColor = Color(0xFF111518)
 private val SurfaceColor = Color(0xFF1A2227)
 
 @Composable
-fun AkkTheme(accent: Color, text: Color, panelColor: Color, content: @Composable () -> Unit) {
+fun AkkTheme(
+    accent: Color,
+    text: Color,
+    panelColor: Color,
+    fontFamily: FontFamily?,
+    content: @Composable () -> Unit,
+) {
     val scheme = darkColorScheme(
         primary = accent,
         onPrimary = OnAccent,
@@ -60,7 +69,31 @@ fun AkkTheme(accent: Color, text: Color, panelColor: Color, content: @Composable
         onSurface = text,
         onSurfaceVariant = text.copy(alpha = 0.6f),
     )
+    val typography = remember(fontFamily) { typographyFor(fontFamily) }
     CompositionLocalProvider(LocalPanelColor provides panelColor) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        MaterialTheme(colorScheme = scheme, typography = typography, content = content)
     }
+}
+
+/** Применяет выбранный шрифт ко всей шкале типографики. */
+private fun typographyFor(f: FontFamily?): Typography {
+    val d = Typography()
+    if (f == null) return d
+    return d.copy(
+        displayLarge = d.displayLarge.copy(fontFamily = f),
+        displayMedium = d.displayMedium.copy(fontFamily = f),
+        displaySmall = d.displaySmall.copy(fontFamily = f),
+        headlineLarge = d.headlineLarge.copy(fontFamily = f),
+        headlineMedium = d.headlineMedium.copy(fontFamily = f),
+        headlineSmall = d.headlineSmall.copy(fontFamily = f),
+        titleLarge = d.titleLarge.copy(fontFamily = f),
+        titleMedium = d.titleMedium.copy(fontFamily = f),
+        titleSmall = d.titleSmall.copy(fontFamily = f),
+        bodyLarge = d.bodyLarge.copy(fontFamily = f),
+        bodyMedium = d.bodyMedium.copy(fontFamily = f),
+        bodySmall = d.bodySmall.copy(fontFamily = f),
+        labelLarge = d.labelLarge.copy(fontFamily = f),
+        labelMedium = d.labelMedium.copy(fontFamily = f),
+        labelSmall = d.labelSmall.copy(fontFamily = f),
+    )
 }

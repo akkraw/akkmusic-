@@ -18,16 +18,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowDraggableArea
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.Dispatchers
@@ -38,14 +46,17 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.net.URL
 
+private val EdgeDark = Color(0xFF0B0F12)
+
 fun main() {
     val log = File(AppConfig.appDir(), "crash.log")
     Thread.setDefaultUncaughtExceptionHandler { _, e -> logCrash(log, e) }
     try {
         application {
             val state = rememberWindowState(width = 1040.dp, height = 720.dp)
-            Window(onCloseRequest = ::exitApplication, title = "AkkMusic", state = state) {
-                AppRoot()
+            // undecorated: своя рамка и кнопки, без системной планки
+            Window(onCloseRequest = ::exitApplication, state = state, undecorated = true, title = "AkkMusic") {
+                AppRoot(state, ::exitApplication)
             }
         }
     } catch (e: Throwable) {
@@ -62,18 +73,18 @@ private fun logCrash(file: File, e: Throwable) {
 }
 
 @Composable
-private fun AppRoot() {
+private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Unit) {
     val scope = rememberCoroutineScope()
     val engine = remember { PlayerEngine() }
     DisposableEffect(Unit) { onDispose { engine.release() } }
 
-    // Внешний вид
     var accentKey by remember { mutableStateOf(AppConfig.accent ?: "sky") }
     var textKey by remember { mutableStateOf(AppConfig.textColor ?: "white") }
+    var fontKey by remember { mutableStateOf(AppConfig.font ?: "system") }
     var bgPath by remember { mutableStateOf(AppConfig.bgPath) }
     var bgDim by remember { mutableStateOf(AppConfig.bgDim) }
+    var bgBlur by remember { mutableStateOf(AppConfig.bgBlur) }
 
-    // Источник и библиотека
     var source by remember { mutableStateOf(AppConfig.source) }
     var localFolder by remember { mutableStateOf(AppConfig.localFolder) }
     var serverOn by remember { mutableStateOf(AppConfig.serverConfigured) }
@@ -92,8 +103,7 @@ private fun AppRoot() {
 
     fun reload() {
         scope.launch {
-            loading = true
-            error = null
+            loading = true; error = null
             try {
                 library = withContext(Dispatchers.IO) {
                     val local = if (source.usesLocal) LocalLibrary.scan(localFolder) else emptyList()
@@ -101,8 +111,7 @@ private fun AppRoot() {
                     local + remote
                 }
             } catch (e: Exception) {
-                error = e.message ?: "Не удалось загрузить библиотеку"
-                library = emptyList()
+                error = e.message ?: "Не удалось загрузить библиотеку"; library = emptyList()
             } finally {
                 loading = false
             }
@@ -111,14 +120,17 @@ private fun AppRoot() {
     LaunchedEffect(source, localFolder, serverOn) { reload() }
 
     val hasBg = bgPath != null
-    val panelColor = if (hasBg) Color(0xFF0B0F12).copy(alpha = 0.72f) else Color(0xFF1A2227)
+    val panelColor = if (hasBg) EdgeDark.copy(alpha = 0.72f) else Color(0xFF1A2227)
     val bgImage = rememberFileImage(bgPath)
 
-    AkkTheme(accentOf(accentKey).color, textOf(textKey).color, panelColor) {
+    AkkTheme(accentOf(accentKey).color, textOf(textKey).color, panelColor, Fonts.family(fontKey)) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            // Фон-картинка + затемнение
             if (bgImage != null) {
-                Image(BitmapPainter(bgImage), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(
+                    BitmapPainter(bgImage), null,
+                    modifier = Modifier.fillMaxSize().then(if (bgBlur > 0) Modifier.blur(bgBlur.dp) else Modifier),
+                    contentScale = ContentScale.Crop,
+                )
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgDim / 100f)))
             }
 
@@ -131,22 +143,26 @@ private fun AppRoot() {
                 }
             }
 
-            if (!configured) {
-                SetupScreen(
-                    onPickFolder = { f -> AppConfig.localFolder = f; localFolder = f },
-                    onConnectServer = { showSettings = true },
+            Column(Modifier.fillMaxSize()) {
+                WindowChrome(
+                    windowState = windowState,
+                    hasBg = hasBg,
+                    count = if (configured) shown.size else 0,
+                    query = query,
+                    showSearch = configured,
+                    onQuery = { query = it },
+                    onSettings = { showSettings = true },
+                    onExit = onExit,
                 )
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    TopBar(shown.size, query, { query = it }, { showSettings = true })
-                    error?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                    }
+                if (!configured) {
+                    SetupScreen(
+                        onPickFolder = { f -> AppConfig.localFolder = f; localFolder = f },
+                        onConnectServer = { showSettings = true },
+                    )
+                } else {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         if (loading) {
-                            CircularProgressIndicator(Modifier.align(Alignment.Center),
-                                color = MaterialTheme.colorScheme.primary)
+                            CircularProgressIndicator(Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
                         } else if (shown.isEmpty()) {
                             Text(
                                 if (library.isEmpty()) "Музыка не найдена" else "Ничего не найдено",
@@ -157,19 +173,20 @@ private fun AppRoot() {
                             val currentId = engine.currentTrack?.id
                             LazyColumn(Modifier.fillMaxSize()) {
                                 items(shown, key = { it.id }) { track ->
-                                    TrackRow(track, track.id == currentId) {
-                                        engine.play(shown, shown.indexOf(track))
-                                    }
+                                    TrackRow(track, track.id == currentId) { engine.play(shown, shown.indexOf(track)) }
                                 }
                                 item { Spacer(Modifier.height(8.dp)) }
                             }
                         }
+                        error?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.align(Alignment.TopCenter).padding(8.dp))
+                        }
                     }
-                    engine.currentTrack?.let { PlayerBar(engine, it, tick) { fullOpen = true } }
+                    engine.currentTrack?.let { PlayerBar(engine, it, tick, hasBg) { fullOpen = true } }
                 }
             }
 
-            // Полноэкранный плеер поверх всего
             AnimatedVisibility(
                 visible = fullOpen && engine.currentTrack != null,
                 enter = slideInVertically { it } + fadeIn(),
@@ -182,39 +199,86 @@ private fun AppRoot() {
         if (showSettings) {
             SettingsDialog(
                 source, localFolder, serverOn, engine,
-                accentKey, textKey, bgPath, bgDim,
+                accentKey, textKey, fontKey, bgPath, bgDim, bgBlur,
                 onSource = { source = it; AppConfig.source = it },
                 onFolder = { AppConfig.localFolder = it; localFolder = it },
                 onServerChanged = { serverOn = AppConfig.serverConfigured },
                 onAccent = { accentKey = it; AppConfig.accent = it },
                 onText = { textKey = it; AppConfig.textColor = it },
+                onFont = { fontKey = it; AppConfig.font = it },
                 onBg = { bgPath = it; AppConfig.bgPath = it },
                 onDim = { bgDim = it; AppConfig.bgDim = it },
+                onBlur = { bgBlur = it; AppConfig.bgBlur = it },
                 onClose = { showSettings = false },
             )
         }
     }
 }
 
+/** Своя верхняя панель: перетаскивание окна, заголовок, поиск, настройки и кнопки окна. */
 @Composable
-private fun TopBar(count: Int, query: String, onQuery: (String) -> Unit, onSettings: () -> Unit) {
-    Surface(color = LocalPanelColor.current, tonalElevation = 2.dp) {
+private fun FrameWindowScope.WindowChrome(
+    windowState: WindowState,
+    hasBg: Boolean,
+    count: Int,
+    query: String,
+    showSearch: Boolean,
+    onQuery: (String) -> Unit,
+    onSettings: () -> Unit,
+    onExit: () -> Unit,
+) {
+    val brush = if (hasBg)
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.85f), EdgeDark.copy(alpha = 0.35f)))
+    else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
+
+    Box(Modifier.fillMaxWidth().background(brush)) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("AkkMusic", style = MaterialTheme.typography.headlineSmall)
-                Text("$count треков", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            WindowDraggableArea(Modifier.weight(1f)) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(
+                        "akkmusic_",
+                        fontFamily = Fonts.monoOrFallback(),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (showSearch) {
+                        Text("$count треков", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-            OutlinedTextField(
-                value = query, onValueChange = onQuery, singleLine = true,
-                placeholder = { Text("Поиск") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                modifier = Modifier.width(280.dp),
-            )
-            IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Настройки") }
+            if (showSearch) {
+                OutlinedTextField(
+                    value = query, onValueChange = onQuery, singleLine = true,
+                    placeholder = { Text("Поиск") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.width(260.dp),
+                )
+                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Настройки") }
+            }
+            // Кнопки окна
+            IconButton(onClick = { windowState.isMinimized = true }) {
+                Icon(Icons.Default.Minimize, "Свернуть")
+            }
+            IconButton(onClick = {
+                windowState.placement =
+                    if (windowState.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating
+                    else WindowPlacement.Fullscreen
+            }) {
+                Icon(
+                    if (windowState.placement == WindowPlacement.Fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    "Во весь экран",
+                )
+            }
+            IconButton(onClick = onExit) { Icon(Icons.Default.Close, "Закрыть") }
         }
     }
 }
@@ -248,11 +312,12 @@ private fun TrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, onExpand: () -> Unit) {
+private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Boolean, onExpand: () -> Unit) {
     var pos by remember { mutableStateOf(0L) }
     var dur by remember { mutableStateOf(0L) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
+    var volume by remember { mutableStateOf(AppConfig.volume.toFloat()) }
     val accent = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(track.id) {
@@ -262,10 +327,13 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, onExpand: (
         }
     }
 
-    Surface(color = LocalPanelColor.current, tonalElevation = 3.dp) {
+    val brush = if (hasBg)
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.4f), EdgeDark.copy(alpha = 0.9f)))
+    else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
+
+    Box(Modifier.fillMaxWidth().background(brush)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Клик по обложке и названию открывает большой плеер
                 Row(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { onExpand() },
                     verticalAlignment = Alignment.CenterVertically,
@@ -314,6 +382,19 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, onExpand: (
                 )
                 Text(formatTime(dur), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Громкость
+                Icon(
+                    if (volume < 1f) Icons.Default.VolumeOff else Icons.Default.VolumeUp, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp).size(18.dp),
+                )
+                Slider(
+                    value = volume,
+                    onValueChange = { volume = it; engine.setVolume(it.toInt()) },
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
+                    modifier = Modifier.width(110.dp).padding(start = 6.dp),
+                )
             }
         }
     }
@@ -335,7 +416,6 @@ private fun SmallCover(track: Track, size: Dp) {
     }
 }
 
-/** Картинка из файла (фон) в фоне. */
 @Composable
 private fun rememberFileImage(path: String?): ImageBitmap? {
     val state = produceState<ImageBitmap?>(null, path) {
