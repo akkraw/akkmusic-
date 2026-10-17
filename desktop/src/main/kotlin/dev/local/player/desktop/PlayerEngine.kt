@@ -91,7 +91,9 @@ class PlayerEngine {
         queue = tracks
         shuffle = shuffleOn
         rebuildOrder(startIndex)
-        playOrderPos(0)
+        // rebuildOrder уже выставил orderPos на выбранный трек — играем именно его,
+        // а не order[0] (из-за этого раньше всегда запускался первый трек списка)
+        playOrderPos(orderPos)
     }
 
     private fun rebuildOrder(startIndex: Int) {

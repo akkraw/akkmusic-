@@ -250,11 +250,11 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
 
-    // тикер позиции
+    // тикер позиции: часто, чтобы ползунок двигался плавно
     LaunchedEffect(track.id) {
         while (true) {
             if (!dragging) { pos = engine.positionMs(); dur = engine.durationMs() }
-            kotlinx.coroutines.delay(500)
+            kotlinx.coroutines.delay(100)
         }
     }
 
