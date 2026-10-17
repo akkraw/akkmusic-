@@ -36,7 +36,8 @@ jobs:
       - name: Show errors
         if: failure()
         shell: bash
-        run: grep -E "^e: |error:|What went wrong|Execution failed" -A3 build.log | head -60 || true
+        run: |
+          grep -E "^e: |error:|What went wrong|Execution failed" -A3 build.log | head -60 || true
 
       - name: Collect artifacts
         if: success()
