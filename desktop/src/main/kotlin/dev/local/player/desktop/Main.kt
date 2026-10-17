@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.text.font.FontFamily
@@ -33,7 +35,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowDraggableArea
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
@@ -236,7 +237,18 @@ private fun FrameWindowScope.WindowChrome(
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            WindowDraggableArea(Modifier.weight(1f)) {
+            // Перетаскивание окна за заголовок
+            Box(
+                Modifier.weight(1f).pointerInput(Unit) {
+                    detectDragGestures { change, drag ->
+                        change.consume()
+                        window.setLocation(
+                            (window.x + drag.x).toInt(),
+                            (window.y + drag.y).toInt(),
+                        )
+                    }
+                }
+            ) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text(
                         "akkmusic_",
