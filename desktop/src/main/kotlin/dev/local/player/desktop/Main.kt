@@ -283,11 +283,14 @@ private fun FrameWindowScope.WindowChrome(
                     ),
                     modifier = Modifier.width(260.dp),
                 )
-                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Настройки") }
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Default.Settings, "Настройки", tint = MaterialTheme.colorScheme.onSurface)
+                }
             }
-            // Кнопки окна
+            // Кнопки окна — цветом текста
+            val ctrl = MaterialTheme.colorScheme.onSurface
             IconButton(onClick = { windowState.isMinimized = true }) {
-                Icon(Icons.Default.Minimize, "Свернуть")
+                Icon(Icons.Default.Minimize, "Свернуть", tint = ctrl)
             }
             // Развернуть на рабочую область (не залезает под панель задач)
             IconButton(onClick = {
@@ -297,7 +300,7 @@ private fun FrameWindowScope.WindowChrome(
             }) {
                 Icon(
                     if (windowState.placement == WindowPlacement.Maximized) Icons.Default.FilterNone else Icons.Default.CropSquare,
-                    "Развернуть",
+                    "Развернуть", tint = ctrl,
                 )
             }
             IconButton(onClick = {
@@ -307,10 +310,10 @@ private fun FrameWindowScope.WindowChrome(
             }) {
                 Icon(
                     if (windowState.placement == WindowPlacement.Fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                    "Во весь экран",
+                    "Во весь экран", tint = ctrl,
                 )
             }
-            IconButton(onClick = onExit) { Icon(Icons.Default.Close, "Закрыть") }
+            IconButton(onClick = onExit) { Icon(Icons.Default.Close, "Закрыть", tint = ctrl) }
         }
     }
 }
