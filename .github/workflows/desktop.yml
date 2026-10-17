@@ -29,6 +29,20 @@ jobs:
         shell: bash
         run: echo "APP_VERSION=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
 
+      - name: Bundle libVLC
+        shell: pwsh
+        run: |
+          $ver = "3.0.21"
+          curl.exe -L -o vlc.zip "https://get.videolan.org/vlc/$ver/win64/vlc-$ver-win64.zip"
+          Expand-Archive vlc.zip -DestinationPath vlctmp -Force
+          $src = Get-ChildItem vlctmp -Directory | Select-Object -First 1
+          $dst = "appResources/windows/vlc"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item "$($src.FullName)/libvlc.dll" $dst
+          Copy-Item "$($src.FullName)/libvlccore.dll" $dst
+          Copy-Item "$($src.FullName)/plugins" $dst -Recurse
+          "libVLC встроен: $((Get-ChildItem -Recurse $dst | Measure-Object -Property Length -Sum).Sum / 1MB) МБ"
+
       - name: Build portable app and installer
         shell: bash
         run: ./gradlew createDistributable packageDistributionForCurrentOS --stacktrace 2>&1 | tee build.log
@@ -60,7 +74,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="1.0.${{ github.run_number }}"
-          notes=$(git log -1 --format=%B | grep -v -E "^(Co-Authored-By|Claude-Session):")
+          notes=$(git log -1 --format=%s)
           gh release create "desktop-v$V" out/* \
             --title "AkkMusic Desktop $V" \
             --notes "$notes" \

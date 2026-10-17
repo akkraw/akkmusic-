@@ -1,0 +1,2 @@
+# Сюда CI кладёт встроенный libVLC (appResources/windows/vlc).
+# Папка нужна, чтобы Compose нашёл appResourcesRootDir.

@@ -1,9 +1,11 @@
 package dev.local.player.desktop
 
+import com.sun.jna.NativeLibrary
 import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.component.AudioPlayerComponent
+import java.io.File
 import java.util.concurrent.Executors
 
 enum class RepeatMode { OFF, ALL, ONE }
@@ -14,15 +16,35 @@ enum class RepeatMode { OFF, ALL, ONE }
  */
 class PlayerEngine {
 
-    /** Нашлась ли установленная VLC. Без неё воспроизведение не работает. */
-    val vlcAvailable: Boolean = try {
-        NativeDiscovery().discover()
+    // Сначала пробуем VLC, встроенный в приложение (bundled), потом — установленный в системе.
+    private val component: AudioPlayerComponent? = createComponent()
+
+    /** Доступно ли воспроизведение (нашёлся и загрузился libVLC). */
+    val vlcAvailable: Boolean get() = component != null
+
+    private val player: MediaPlayer? = component?.mediaPlayer()
+
+    private fun createComponent(): AudioPlayerComponent? = try {
+        val bundled = bundledVlcDir()
+        if (bundled != null) {
+            // libVLC лежит рядом с приложением — указываем JNA, где его искать
+            NativeLibrary.addSearchPath("libvlc", bundled)
+            AudioPlayerComponent()
+        } else if (NativeDiscovery().discover()) {
+            AudioPlayerComponent()
+        } else {
+            null
+        }
     } catch (e: Throwable) {
-        false
+        null
     }
 
-    private val component: AudioPlayerComponent? = if (vlcAvailable) AudioPlayerComponent() else null
-    private val player: MediaPlayer? = component?.mediaPlayer()
+    /** Папка со встроенным libVLC (кладётся в ресурсы при сборке), или null. */
+    private fun bundledVlcDir(): String? {
+        val res = System.getProperty("compose.application.resources.dir") ?: return null
+        val dir = File(res, "vlc")
+        return if (File(dir, "libvlc.dll").exists()) dir.absolutePath else null
+    }
     private val advanceExec = Executors.newSingleThreadExecutor()
 
     var queue: List<Track> = emptyList()

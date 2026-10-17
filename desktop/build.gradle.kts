@@ -36,6 +36,8 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            // Встроенный libVLC и прочие ресурсы (заполняется при сборке в CI)
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
             packageName = "AkkMusic"
             packageVersion = (System.getenv("APP_VERSION") ?: "1.0.0")
             vendor = "akkraw"
