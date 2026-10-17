@@ -87,6 +87,8 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
     var bgPath by remember { mutableStateOf(AppConfig.bgPath) }
     var bgDim by remember { mutableStateOf(AppConfig.bgDim) }
     var bgBlur by remember { mutableStateOf(AppConfig.bgBlur) }
+    var panelContrast by remember { mutableStateOf(AppConfig.panelContrast) }
+    var panelShadow by remember { mutableStateOf(AppConfig.panelShadow) }
 
     var source by remember { mutableStateOf(AppConfig.source) }
     var localFolder by remember { mutableStateOf(AppConfig.localFolder) }
@@ -103,6 +105,9 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
         engine.onChange = { tick++ }
         onDispose { engine.onChange = null }
     }
+    // Подписка на смену трека: engine.currentTrack — не Compose-состояние, поэтому
+    // пересчитываем его при каждом тике, иначе плеер не появлялся до перерисовки.
+    val currentTrack = remember(tick) { engine.currentTrack }
 
     fun reload() {
         scope.launch {
@@ -150,6 +155,7 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
                 WindowChrome(
                     windowState = windowState,
                     hasBg = hasBg,
+                    contrast = panelContrast,
                     count = if (configured) shown.size else 0,
                     query = query,
                     showSearch = configured,
@@ -157,6 +163,7 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
                     onSettings = { showSettings = true },
                     onExit = onExit,
                 )
+                if (hasBg && panelShadow > 0) PanelShadow(panelShadow, fromTop = true)
                 if (!configured) {
                     SetupScreen(
                         onPickFolder = { f -> AppConfig.localFolder = f; localFolder = f },
@@ -173,7 +180,7 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
                                 modifier = Modifier.align(Alignment.Center),
                             )
                         } else {
-                            val currentId = engine.currentTrack?.id
+                            val currentId = currentTrack?.id
                             LazyColumn(Modifier.fillMaxSize()) {
                                 items(shown, key = { it.id }) { track ->
                                     TrackRow(track, track.id == currentId) { engine.play(shown, shown.indexOf(track)) }
@@ -186,23 +193,26 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
                                 modifier = Modifier.align(Alignment.TopCenter).padding(8.dp))
                         }
                     }
-                    engine.currentTrack?.let { PlayerBar(engine, it, tick, hasBg) { fullOpen = true } }
+                    currentTrack?.let {
+                        if (hasBg && panelShadow > 0) PanelShadow(panelShadow, fromTop = false)
+                        PlayerBar(engine, it, tick, hasBg, panelContrast) { fullOpen = true }
+                    }
                 }
             }
 
             AnimatedVisibility(
-                visible = fullOpen && engine.currentTrack != null,
+                visible = fullOpen && currentTrack != null,
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
             ) {
-                engine.currentTrack?.let { FullPlayer(engine, it, tick) { fullOpen = false } }
+                currentTrack?.let { FullPlayer(engine, it, tick) { fullOpen = false } }
             }
         }
 
         if (showSettings) {
             SettingsDialog(
                 source, localFolder, serverOn, engine,
-                accentKey, textKey, fontKey, bgPath, bgDim, bgBlur,
+                accentKey, textKey, fontKey, bgPath, bgDim, bgBlur, panelContrast, panelShadow,
                 onSource = { source = it; AppConfig.source = it },
                 onFolder = { AppConfig.localFolder = it; localFolder = it },
                 onServerChanged = { serverOn = AppConfig.serverConfigured },
@@ -212,6 +222,8 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
                 onBg = { bgPath = it; AppConfig.bgPath = it },
                 onDim = { bgDim = it; AppConfig.bgDim = it },
                 onBlur = { bgBlur = it; AppConfig.bgBlur = it },
+                onContrast = { panelContrast = it; AppConfig.panelContrast = it },
+                onShadow = { panelShadow = it; AppConfig.panelShadow = it },
                 onClose = { showSettings = false },
             )
         }
@@ -223,6 +235,7 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
 private fun FrameWindowScope.WindowChrome(
     windowState: WindowState,
     hasBg: Boolean,
+    contrast: Int,
     count: Int,
     query: String,
     showSearch: Boolean,
@@ -230,8 +243,9 @@ private fun FrameWindowScope.WindowChrome(
     onSettings: () -> Unit,
     onExit: () -> Unit,
 ) {
+    val k = contrast / 100f
     val brush = if (hasBg)
-        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.6f), EdgeDark.copy(alpha = 0.15f)))
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.95f * k), EdgeDark.copy(alpha = 0.4f * k)))
     else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
 
     Box(Modifier.fillMaxWidth().background(brush)) {
@@ -347,7 +361,7 @@ private fun TrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Boolean, onExpand: () -> Unit) {
+private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Boolean, contrast: Int, onExpand: () -> Unit) {
     var pos by remember { mutableStateOf(0L) }
     var dur by remember { mutableStateOf(0L) }
     var dragging by remember { mutableStateOf(false) }
@@ -362,8 +376,9 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
         }
     }
 
+    val k = contrast / 100f
     val brush = if (hasBg)
-        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.15f), EdgeDark.copy(alpha = 0.62f)))
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.4f * k), EdgeDark.copy(alpha = 0.95f * k)))
     else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
 
     Box(Modifier.fillMaxWidth().background(brush)) {
@@ -433,6 +448,14 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
             }
         }
     }
+}
+
+/** Мягкая тень-разделитель: под шапкой (fromTop) или над плеером. */
+@Composable
+private fun PanelShadow(heightDp: Int, fromTop: Boolean) {
+    val colors = if (fromTop) listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent)
+    else listOf(Color.Transparent, Color.Black.copy(alpha = 0.35f))
+    Box(Modifier.fillMaxWidth().height(heightDp.dp).background(Brush.verticalGradient(colors)))
 }
 
 @Composable

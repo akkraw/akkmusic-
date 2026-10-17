@@ -100,6 +100,16 @@ object AppConfig {
         get() = get("font")
         set(v) = set("font", v)
 
+    /** Насыщенность панелей (шапка, плеер): 0 — почти прозрачные, 100 — плотные. */
+    var panelContrast: Int
+        get() = (get("panelContrast")?.toIntOrNull() ?: 70).coerceIn(0, 100)
+        set(v) = set("panelContrast", v.coerceIn(0, 100).toString())
+
+    /** Высота/сила тени под шапкой и над плеером, dp. */
+    var panelShadow: Int
+        get() = (get("panelShadow")?.toIntOrNull() ?: 10).coerceIn(0, 28)
+        set(v) = set("panelShadow", v.coerceIn(0, 28).toString())
+
     var volume: Int
         get() = get("volume")?.toIntOrNull() ?: 80
         set(v) = set("volume", v.coerceIn(0, 100).toString())

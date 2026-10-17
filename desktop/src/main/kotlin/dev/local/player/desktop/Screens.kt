@@ -100,6 +100,8 @@ fun SettingsDialog(
     bgPath: String?,
     bgDim: Int,
     bgBlur: Int,
+    panelContrast: Int,
+    panelShadow: Int,
     onSource: (LibrarySource) -> Unit,
     onFolder: (String?) -> Unit,
     onServerChanged: () -> Unit,
@@ -109,11 +111,15 @@ fun SettingsDialog(
     onBg: (String?) -> Unit,
     onDim: (Int) -> Unit,
     onBlur: (Int) -> Unit,
+    onContrast: (Int) -> Unit,
+    onShadow: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     var showServer by remember { mutableStateOf(false) }
     var dim by remember { mutableStateOf(bgDim.toFloat()) }
     var blur by remember { mutableStateOf(bgBlur.toFloat()) }
+    var contrast by remember { mutableStateOf(panelContrast.toFloat()) }
+    var shadow by remember { mutableStateOf(panelShadow.toFloat()) }
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -230,6 +236,21 @@ fun SettingsDialog(
                         valueRange = 0f..40f, steps = 39,
                     )
                 }
+
+                // Панели (шапка и плеер)
+                Spacer(Modifier.height(12.dp))
+                Text("Контраст панелей", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = contrast,
+                    onValueChange = { contrast = it; onContrast(it.toInt()) },
+                    valueRange = 0f..100f, steps = 19,
+                )
+                Text("Тень панелей", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = shadow,
+                    onValueChange = { shadow = it; onShadow(it.toInt()) },
+                    valueRange = 0f..28f, steps = 27,
+                )
 
                 // Папка
                 Spacer(Modifier.height(8.dp))
