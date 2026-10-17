@@ -43,14 +43,32 @@ private val DarkColors = darkColorScheme(
     onSurfaceVariant = Color(0xFF9AA8B2),
 )
 
-fun main() = application {
-    val state = rememberWindowState(width = 1040.dp, height = 720.dp)
-    Window(onCloseRequest = ::exitApplication, title = "AkkMusic", state = state) {
-        MaterialTheme(colorScheme = DarkColors) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                App()
+fun main() {
+    // Любую ошибку старта пишем в лог рядом с настройками — у оконного приложения
+    // нет консоли, иначе падение на запуске выглядит как «ничего не происходит».
+    val log = java.io.File(AppConfig.appDir(), "crash.log")
+    Thread.setDefaultUncaughtExceptionHandler { _, e -> logCrash(log, e) }
+    try {
+        application {
+            val state = rememberWindowState(width = 1040.dp, height = 720.dp)
+            Window(onCloseRequest = ::exitApplication, title = "AkkMusic", state = state) {
+                MaterialTheme(colorScheme = DarkColors) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        App()
+                    }
+                }
             }
         }
+    } catch (e: Throwable) {
+        logCrash(log, e)
+        throw e
+    }
+}
+
+private fun logCrash(file: java.io.File, e: Throwable) {
+    try {
+        file.appendText("[${java.time.LocalDateTime.now()}] " + e.stackTraceToString() + "\n")
+    } catch (_: Throwable) {
     }
 }
 

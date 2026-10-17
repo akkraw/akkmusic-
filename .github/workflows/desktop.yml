@@ -29,9 +29,9 @@ jobs:
         shell: bash
         run: echo "APP_VERSION=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
 
-      - name: Build installer
+      - name: Build portable app and installer
         shell: bash
-        run: ./gradlew packageDistributionForCurrentOS --stacktrace 2>&1 | tee build.log
+        run: ./gradlew createDistributable packageDistributionForCurrentOS --stacktrace 2>&1 | tee build.log
 
       - name: Show errors
         if: failure()
@@ -44,7 +44,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
-          find build/compose/binaries -type f \( -name "*.msi" -o -name "*.exe" \) -exec cp {} out/ \;
+          # Портативная версия: папка с готовым AkkMusic.exe, запускается без установки
+          appdir=$(find build/compose/binaries -type d -name AkkMusic -path "*/app/*" | head -1)
+          if [ -n "$appdir" ]; then
+            powershell -Command "Compress-Archive -Path '$appdir\\*' -DestinationPath 'out\\AkkMusic-portable-${APP_VERSION}.zip' -Force"
+          fi
+          # Установщик (ставит в меню Пуск)
+          find build/compose/binaries -type f -name "*.msi" -exec cp {} out/ \;
           ls -la out
 
       - name: Publish release
