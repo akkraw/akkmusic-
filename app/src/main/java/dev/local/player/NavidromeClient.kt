@@ -87,6 +87,32 @@ class NavidromeClient(
         call("ping")
     }
 
+    /**
+     * Пинг до сервера в миллисекундах. Первый запрос открывает соединение (TLS),
+     * его не считаем — берём лучший из следующих, по уже открытому соединению.
+     */
+    fun latencyMs(): Long {
+        val url = URL("$baseUrl/rest/ping?$auth&f=json")
+        var best = Long.MAX_VALUE
+        repeat(3) { i ->
+            val start = System.nanoTime()
+            try {
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5_000
+                conn.readTimeout = 5_000
+                if (conn.responseCode != 200) throw ServerException("Сервер ответил ${conn.responseCode}")
+                // Без disconnect(): соединение остаётся открытым для следующего замера
+                conn.inputStream.use { it.readBytes() }
+            } catch (e: ServerException) {
+                throw e
+            } catch (e: Exception) {
+                throw ServerException("Сервер недоступен")
+            }
+            if (i > 0) best = minOf(best, (System.nanoTime() - start) / 1_000_000)
+        }
+        return best
+    }
+
     /** Все треки сервера. Пустой запрос search3 в Navidrome возвращает всю библиотеку. */
     fun songs(): List<Track> {
         val result = mutableListOf<Track>()

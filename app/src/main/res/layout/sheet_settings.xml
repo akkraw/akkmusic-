@@ -56,6 +56,19 @@
                 android:text="@string/source_all" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
+        <!-- Пинг до сервера: цвет точки — качество связи -->
+        <TextView
+            android:id="@+id/serverPing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:drawablePadding="8dp"
+            android:gravity="center_vertical"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurface"
+            android:visibility="gone"
+            android:drawableStart="@drawable/ping_dot" />
+
         <TextView
             android:id="@+id/serverHint"
             android:layout_width="match_parent"

@@ -112,6 +112,9 @@
     <string name="server_checking">Проверяю…</string>
     <string name="server_ok">Сервер подключён</string>
     <string name="server_error">Сервер: %s</string>
+    <string name="server_ping">Пинг до сервера: %d мс</string>
+    <string name="server_ping_checking">Пинг до сервера: проверяю…</string>
+    <string name="server_ping_fail">Сервер не отвечает</string>
     <string name="server_unavailable">Не удалось загрузить музыку с сервера. Проверь интернет и настройки сервера.</string>
     <string name="no_tracks_server">На сервере пока нет музыки.</string>
 </resources>

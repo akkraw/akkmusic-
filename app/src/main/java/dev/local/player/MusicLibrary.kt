@@ -73,26 +73,34 @@ object MusicLibrary {
         strength = Collator.SECONDARY
     }
 
-    fun load(context: Context, edits: TrackEdits? = null): List<Track> {
+    /**
+     * [shown] — треки для общего списка по выбранному источнику,
+     * [all] — всё, что можно сыграть: плейлисты показывают скачанные на телефон
+     * треки всегда, даже в режиме «Сервер».
+     */
+    class Result(val shown: List<Track>, val all: List<Track>)
+
+    fun load(context: Context, edits: TrackEdits? = null): Result {
         val settings = ServerSettings(context)
         val source = settings.source
-        val local = if (source.usesPhone && hasAudioPermission(context)) loadLocal(context, edits)
-            else emptyList()
+        val local = if (hasAudioPermission(context)) loadLocal(context, edits) else emptyList()
 
         serverError = null
-        if (!source.usesServer) return local
-        val client = settings.client() ?: run {
+        if (!source.usesServer) return Result(local, local)
+        val remote = settings.client()?.let { client ->
+            try {
+                applyEdits(client.songs(), edits)
+            } catch (e: ServerException) {
+                serverError = e.message
+                emptyList()
+            }
+        } ?: run {
             serverError = "Сервер не подключён"
-            return local
-        }
-        val remote = try {
-            applyEdits(client.songs(), edits)
-        } catch (e: ServerException) {
-            serverError = e.message
             emptyList()
         }
         // Общий список: исполнитель → альбом → номер трека, как у локальной медиатеки
-        return sortByArtist(local + remote)
+        val all = sortByArtist(local + remote)
+        return Result(if (source.usesPhone) all else all.filter { it.isRemote }, all)
     }
 
     private fun sortByArtist(tracks: List<Track>): List<Track> = tracks.sortedWith(

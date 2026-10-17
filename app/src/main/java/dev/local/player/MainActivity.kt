@@ -263,6 +263,8 @@ class MainActivity : AppCompatActivity() {
         get() = controllerFuture?.takeIf { it.isDone && !it.isCancelled }?.get()
 
     private val ioExecutor = Executors.newSingleThreadExecutor()
+    // Пинг отдельно, чтобы медленный сервер не задерживал загрузку медиатеки
+    private val pingExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private var userSeeking = false
 
@@ -433,6 +435,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         ioExecutor.shutdown()
+        pingExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -468,8 +471,8 @@ class MainActivity : AppCompatActivity() {
             val loaded = MusicLibrary.load(applicationContext, trackEdits)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                library = loaded
-                trackById = loaded.associateBy { it.id }
+                library = loaded.shown
+                trackById = loaded.all.associateBy { it.id }
                 libraryLoaded = true
                 render()
                 updatePlayerUi()
@@ -624,7 +627,7 @@ class MainActivity : AppCompatActivity() {
         showScreen(Screen.PLAYLIST)
     }
 
-    /** Треки открытого плейлиста, которые реально есть на телефоне. */
+    /** Треки открытого плейлиста, которые сейчас доступны (с телефона — при любом источнике). */
     private fun openPlaylistTracks(): List<Track> =
         playlists.get(openPlaylistId)?.trackIds?.mapNotNull { trackById[it] } ?: emptyList()
 
@@ -944,6 +947,26 @@ class MainActivity : AppCompatActivity() {
         val sourceGroup = v.findViewById<MaterialButtonToggleGroup>(R.id.sourceGroup)
         val serverHint = v.findViewById<TextView>(R.id.serverHint)
         val serverBtn = v.findViewById<Button>(R.id.serverBtn)
+        val serverPing = v.findViewById<TextView>(R.id.serverPing)
+        // Пинг обновляется, пока открыты настройки; новый запуск отменяет старую цепочку
+        var pingGen = 0
+        fun measurePing() {
+            val gen = ++pingGen
+            val client = serverSettings.client()
+            if (client == null) {
+                serverPing.visibility = View.GONE
+                return
+            }
+            serverPing.visibility = View.VISIBLE
+            pingExecutor.execute {
+                val ms = try { client.latencyMs() } catch (e: ServerException) { null }
+                runOnUiThread {
+                    if (isDestroyed || gen != pingGen) return@runOnUiThread
+                    showPing(serverPing, ms)
+                    serverPing.postDelayed({ if (!isDestroyed && gen == pingGen) measurePing() }, PING_INTERVAL_MS)
+                }
+            }
+        }
         fun refreshServer() {
             serverHint.text = if (serverSettings.configured) {
                 val host = java.net.URI(serverSettings.url).host ?: serverSettings.url
@@ -951,6 +974,11 @@ class MainActivity : AppCompatActivity() {
             } else getString(R.string.server_none)
             serverBtn.setText(if (serverSettings.configured) R.string.server_change else R.string.server_connect)
             sourceGroup.check(sourceButtonId(serverSettings.source))
+            serverPing.setText(R.string.server_ping_checking)
+            serverPing.compoundDrawableTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(this, R.color.ping_unknown)
+            )
+            measurePing()
         }
         refreshServer()
         sourceGroup.addOnButtonCheckedListener { _, id, checked ->
@@ -1050,6 +1078,7 @@ class MainActivity : AppCompatActivity() {
         }
         sheet.setOnDismissListener {
             if (settingsSheet === sheet) settingsSheet = null
+            pingGen++ // останавливаем замеры пинга
             if (hasBg) uiPrefs.edit().putInt(KEY_BG_DIM, slider.value.toInt()).apply()
         }
         sheet.show()
@@ -1067,6 +1096,18 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { if (!isDestroyed) recreate() }
             }
         }
+    }
+
+    /** Пинг: зелёный до 50 мс, оранжевый до 80, дальше красный; null — сервер не ответил. */
+    private fun showPing(view: TextView, ms: Long?) {
+        view.text = if (ms == null) getString(R.string.server_ping_fail)
+            else getString(R.string.server_ping, ms)
+        val color = when {
+            ms == null || ms > 80 -> R.color.ping_bad
+            ms >= 50 -> R.color.ping_mid
+            else -> R.color.ping_good
+        }
+        view.compoundDrawableTintList = ColorStateList.valueOf(ContextCompat.getColor(this, color))
     }
 
     private fun sourceButtonId(src: LibrarySource): Int = when (src) {
@@ -1283,8 +1324,8 @@ class MainActivity : AppCompatActivity() {
             val loaded = MusicLibrary.load(applicationContext, trackEdits)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                library = loaded
-                trackById = loaded.associateBy { it.id }
+                library = loaded.shown
+                trackById = loaded.all.associateBy { it.id }
                 render()
             }
         }
@@ -1872,6 +1913,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val PING_INTERVAL_MS = 5_000L
         private const val KEY_SCREEN = "screen"
         private const val KEY_PLAYLIST = "playlist"
         private const val KEY_SORT = "track_sort"
