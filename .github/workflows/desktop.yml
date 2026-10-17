@@ -51,7 +51,8 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          grep -E "^e: |error:|What went wrong|Execution failed" -A3 build.log | head -60 || true
+          errs=$(grep -E "^e: |: error:|Unresolved|FAILURE:|What went wrong|Execution failed" -A2 build.log | head -80 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\r//g;s/\n/%0A/g')
+          echo "::error title=Desktop build error::${errs}"
 
       - name: Collect artifacts
         if: success()
