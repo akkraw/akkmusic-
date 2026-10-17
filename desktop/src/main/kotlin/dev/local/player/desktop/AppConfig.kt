@@ -74,11 +74,23 @@ object AppConfig {
         save()
     }
 
-    // ---------- Внешний вид (на будущее) ----------
+    // ---------- Внешний вид ----------
 
     var accent: String?
         get() = get("accent")
         set(v) = set("accent", v)
+
+    var textColor: String?
+        get() = get("textColor")
+        set(v) = set("textColor", v)
+
+    var bgPath: String?
+        get() = get("bgPath")
+        set(v) = set("bgPath", v)
+
+    var bgDim: Int
+        get() = (get("bgDim")?.toIntOrNull() ?: 55).coerceIn(0, 90)
+        set(v) = set("bgDim", v.coerceIn(0, 90).toString())
 
     var volume: Int
         get() = get("volume")?.toIntOrNull() ?: 80

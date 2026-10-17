@@ -1,27 +1,44 @@
 package dev.local.player.desktop
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
 
-/** Выбор папки через системный диалог. Возвращает путь или null. */
 private fun pickFolder(): String? {
     val chooser = JFileChooser().apply {
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
         dialogTitle = "Папка с музыкой"
+    }
+    return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
+        chooser.selectedFile.absolutePath else null
+}
+
+private fun pickImage(): String? {
+    val chooser = JFileChooser().apply {
+        dialogTitle = "Фоновая картинка"
+        fileFilter = FileNameExtensionFilter("Изображения", "jpg", "jpeg", "png", "bmp", "gif", "webp")
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
         chooser.selectedFile.absolutePath else null
@@ -51,17 +68,47 @@ fun SetupScreen(onPickFolder: (String) -> Unit, onConnectServer: () -> Unit) {
 }
 
 @Composable
+private fun SwatchRow(items: List<Swatch>, selected: String, onPick: (String) -> Unit) {
+    val ring = MaterialTheme.colorScheme.onSurface
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
+    ) {
+        items.forEach { sw ->
+            Box(
+                Modifier.padding(end = 10.dp).size(36.dp).clip(CircleShape)
+                    .background(sw.color)
+                    .border(
+                        width = if (sw.key == selected) 3.dp else 0.dp,
+                        color = if (sw.key == selected) ring else Color.Transparent,
+                        shape = CircleShape,
+                    )
+                    .clickable { onPick(sw.key) },
+            )
+        }
+    }
+}
+
+@Composable
 fun SettingsDialog(
     source: LibrarySource,
     localFolder: String?,
     serverOn: Boolean,
     engine: PlayerEngine,
+    accentKey: String,
+    textKey: String,
+    bgPath: String?,
+    bgDim: Int,
     onSource: (LibrarySource) -> Unit,
     onFolder: (String?) -> Unit,
     onServerChanged: () -> Unit,
+    onAccent: (String) -> Unit,
+    onText: (String) -> Unit,
+    onBg: (String?) -> Unit,
+    onDim: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     var showServer by remember { mutableStateOf(false) }
+    var dim by remember { mutableStateOf(bgDim.toFloat()) }
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -76,8 +123,7 @@ fun SettingsDialog(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     ) {
                         Text(
-                            "Не найден VLC — без него воспроизведение не работает. " +
-                                "Установи VLC с videolan.org и перезапусти приложение.",
+                            "libVLC не загрузился — воспроизведение недоступно. См. crash.log в папке настроек.",
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(12.dp),
                             style = MaterialTheme.typography.bodySmall,
@@ -85,6 +131,7 @@ fun SettingsDialog(
                     }
                 }
 
+                // Источник
                 Text("Источник музыки", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 val options = listOf(
@@ -107,48 +154,65 @@ fun SettingsDialog(
                     }
                 }
 
+                // Цвета
                 Spacer(Modifier.height(20.dp))
+                Text("Акцент", style = MaterialTheme.typography.labelLarge)
+                SwatchRow(ACCENTS, accentKey, onAccent)
+                Text("Цвет текста", style = MaterialTheme.typography.labelLarge)
+                SwatchRow(TEXTS, textKey, onText)
+
+                // Фон
+                Spacer(Modifier.height(12.dp))
+                Text("Фон", style = MaterialTheme.typography.labelLarge)
+                Row {
+                    TextButton(onClick = { pickImage()?.let(onBg) }) {
+                        Icon(Icons.Default.Image, null); Spacer(Modifier.width(6.dp))
+                        Text(if (bgPath == null) "Выбрать картинку" else "Сменить")
+                    }
+                    if (bgPath != null) {
+                        TextButton(onClick = { onBg(null) }) { Text("Убрать") }
+                    }
+                }
+                if (bgPath != null) {
+                    Text("Затемнение", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(
+                        value = dim,
+                        onValueChange = { dim = it; onDim(it.toInt()) },
+                        valueRange = 0f..90f, steps = 17,
+                    )
+                }
+
+                // Папка
+                Spacer(Modifier.height(8.dp))
                 Text("Папка с музыкой", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    localFolder ?: "не выбрана",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
+                Text(localFolder ?: "не выбрана", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 Row {
                     TextButton(onClick = { pickFolder()?.let(onFolder) }) {
                         Text(if (localFolder == null) "Выбрать" else "Сменить")
                     }
-                    if (localFolder != null) {
-                        TextButton(onClick = { onFolder(null) }) { Text("Убрать") }
-                    }
+                    if (localFolder != null) TextButton(onClick = { onFolder(null) }) { Text("Убрать") }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                // Сервер
+                Spacer(Modifier.height(8.dp))
                 Text("Сервер", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    if (serverOn) AppConfig.serverUrl ?: "" else "не подключён",
+                Text(if (serverOn) AppConfig.serverUrl ?: "" else "не подключён",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 Row {
                     TextButton(onClick = { showServer = true }) {
                         Text(if (serverOn) "Изменить" else "Подключиться")
                     }
-                    if (serverOn) {
-                        TextButton(onClick = { AppConfig.forgetServer(); onServerChanged() }) { Text("Отключить") }
-                    }
+                    if (serverOn) TextButton(onClick = { AppConfig.forgetServer(); onServerChanged() }) { Text("Отключить") }
                 }
             }
         },
     )
 
     if (showServer) {
-        ServerDialog(
-            onClose = { showServer = false },
-            onConnected = { onServerChanged(); showServer = false },
-        )
+        ServerDialog(onClose = { showServer = false }, onConnected = { onServerChanged(); showServer = false })
     }
 }
 
