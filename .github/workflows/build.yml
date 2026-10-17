@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main]
+    paths-ignore: ["desktop/**", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
 permissions:
