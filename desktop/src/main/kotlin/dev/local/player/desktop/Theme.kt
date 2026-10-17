@@ -41,6 +41,22 @@ val TEXTS = listOf(
 fun accentOf(key: String?): Swatch = ACCENTS.find { it.key == key } ?: ACCENTS[0]
 fun textOf(key: String?): Swatch = TEXTS.find { it.key == key } ?: TEXTS[0]
 
+/** Сохранённое значение — либо ключ пресета, либо произвольный #RRGGBB. */
+fun parseHex(s: String?): Color? {
+    if (s == null || !s.startsWith("#")) return null
+    return try {
+        Color(("ff" + s.removePrefix("#")).toLong(16))
+    } catch (e: Exception) {
+        null
+    }
+}
+
+fun toHex(c: Color): String =
+    "#%02X%02X%02X".format((c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+
+fun accentColor(stored: String?): Color = parseHex(stored) ?: accentOf(stored).color
+fun textColorOf(stored: String?): Color = parseHex(stored) ?: textOf(stored).color
+
 /** Цвет панелей (шапка, плеер): полупрозрачный поверх фона-картинки, сплошной без неё. */
 val LocalPanelColor = staticCompositionLocalOf { Color(0xFF1A2227) }
 

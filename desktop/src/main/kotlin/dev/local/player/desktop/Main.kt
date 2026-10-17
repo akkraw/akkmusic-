@@ -8,7 +8,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -124,7 +126,7 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
     val panelColor = if (hasBg) EdgeDark.copy(alpha = 0.72f) else Color(0xFF1A2227)
     val bgImage = rememberFileImage(bgPath)
 
-    AkkTheme(accentOf(accentKey).color, textOf(textKey).color, panelColor, Fonts.family(fontKey)) {
+    AkkTheme(accentColor(accentKey), textColorOf(textKey), panelColor, Fonts.family(fontKey)) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             if (bgImage != null) {
                 Image(
@@ -229,7 +231,7 @@ private fun FrameWindowScope.WindowChrome(
     onExit: () -> Unit,
 ) {
     val brush = if (hasBg)
-        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.85f), EdgeDark.copy(alpha = 0.35f)))
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.6f), EdgeDark.copy(alpha = 0.15f)))
     else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
 
     Box(Modifier.fillMaxWidth().background(brush)) {
@@ -237,15 +239,22 @@ private fun FrameWindowScope.WindowChrome(
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Перетаскивание окна за заголовок
+            // Перетаскивание окна за заголовок.
+            // Двигаем по абсолютной позиции курсора (а не по дельтам) — иначе рывки.
             Box(
                 Modifier.weight(1f).pointerInput(Unit) {
-                    detectDragGestures { change, drag ->
-                        change.consume()
-                        window.setLocation(
-                            (window.x + drag.x).toInt(),
-                            (window.y + drag.y).toInt(),
-                        )
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val mouseStart = java.awt.MouseInfo.getPointerInfo().location
+                        val winStart = java.awt.Point(window.x, window.y)
+                        drag(down.id) { change ->
+                            change.consume()
+                            val now = java.awt.MouseInfo.getPointerInfo().location
+                            window.setLocation(
+                                winStart.x + (now.x - mouseStart.x),
+                                winStart.y + (now.y - mouseStart.y),
+                            )
+                        }
                     }
                 }
             ) {
@@ -279,6 +288,17 @@ private fun FrameWindowScope.WindowChrome(
             // Кнопки окна
             IconButton(onClick = { windowState.isMinimized = true }) {
                 Icon(Icons.Default.Minimize, "Свернуть")
+            }
+            // Развернуть на рабочую область (не залезает под панель задач)
+            IconButton(onClick = {
+                windowState.placement =
+                    if (windowState.placement == WindowPlacement.Maximized) WindowPlacement.Floating
+                    else WindowPlacement.Maximized
+            }) {
+                Icon(
+                    if (windowState.placement == WindowPlacement.Maximized) Icons.Default.FilterNone else Icons.Default.CropSquare,
+                    "Развернуть",
+                )
             }
             IconButton(onClick = {
                 windowState.placement =
@@ -340,7 +360,7 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
     }
 
     val brush = if (hasBg)
-        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.4f), EdgeDark.copy(alpha = 0.9f)))
+        Brush.verticalGradient(listOf(EdgeDark.copy(alpha = 0.15f), EdgeDark.copy(alpha = 0.62f)))
     else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface))
 
     Box(Modifier.fillMaxWidth().background(brush)) {

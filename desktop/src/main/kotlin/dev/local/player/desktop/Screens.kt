@@ -161,10 +161,32 @@ fun SettingsDialog(
 
                 // Цвета
                 Spacer(Modifier.height(20.dp))
-                Text("Акцент", style = MaterialTheme.typography.labelLarge)
-                SwatchRow(ACCENTS, accentKey, onAccent)
-                Text("Цвет текста", style = MaterialTheme.typography.labelLarge)
-                SwatchRow(TEXTS, textKey, onText)
+                var accentWheel by remember { mutableStateOf(false) }
+                var textWheel by remember { mutableStateOf(false) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Акцент", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { accentWheel = !accentWheel }) {
+                        Text(if (accentWheel) "Пресеты" else "Свой цвет")
+                    }
+                }
+                if (accentWheel) {
+                    ColorWheel(accentColor(accentKey)) { onAccent(toHex(it)) }
+                } else {
+                    SwatchRow(ACCENTS, accentKey, onAccent)
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Цвет текста", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { textWheel = !textWheel }) {
+                        Text(if (textWheel) "Пресеты" else "Свой цвет")
+                    }
+                }
+                if (textWheel) {
+                    ColorWheel(textColorOf(textKey)) { onText(toHex(it)) }
+                } else {
+                    SwatchRow(TEXTS, textKey, onText)
+                }
 
                 // Шрифт
                 Spacer(Modifier.height(4.dp))
