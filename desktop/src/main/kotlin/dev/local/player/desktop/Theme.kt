@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 
 /** Цветной образец для выбора акцента и цвета текста. */
@@ -72,18 +73,39 @@ fun AkkTheme(
     fontFamily: FontFamily?,
     content: @Composable () -> Unit,
 ) {
+    // Все «служебные» цвета Material выводим из акцента и текста — иначе
+    // дорожки ползунков, диалоги и поля берут стандартные почти чёрные тона.
+    val tinted = { t: Float -> lerp(SurfaceColor, accent, t) }
     val scheme = darkColorScheme(
         primary = accent,
         onPrimary = OnAccent,
+        primaryContainer = accent.copy(alpha = 0.28f),
+        onPrimaryContainer = text,
         secondary = accent,
         onSecondary = OnAccent,
         secondaryContainer = accent.copy(alpha = 0.22f),
         onSecondaryContainer = text,
+        tertiary = accent,
+        onTertiary = OnAccent,
         background = BgColor,
-        surface = SurfaceColor,
         onBackground = text,
+        surface = SurfaceColor,
         onSurface = text,
+        surfaceVariant = tinted(0.14f),
         onSurfaceVariant = text.copy(alpha = 0.6f),
+        surfaceTint = accent,
+        inverseSurface = text,
+        inverseOnSurface = BgColor,
+        outline = text.copy(alpha = 0.45f),
+        outlineVariant = text.copy(alpha = 0.2f),
+        surfaceBright = tinted(0.2f),
+        surfaceDim = BgColor,
+        surfaceContainerLowest = tinted(0.03f),
+        surfaceContainerLow = tinted(0.06f),
+        surfaceContainer = tinted(0.09f),
+        surfaceContainerHigh = tinted(0.12f),
+        // неактивная дорожка ползунков — полупрозрачный цвет текста, а не чёрная полоса
+        surfaceContainerHighest = text.copy(alpha = 0.25f),
     )
     val typography = remember(fontFamily) { typographyFor(fontFamily) }
     CompositionLocalProvider(LocalPanelColor provides panelColor) {

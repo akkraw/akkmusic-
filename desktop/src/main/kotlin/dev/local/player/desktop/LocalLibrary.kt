@@ -35,7 +35,7 @@ object LocalLibrary {
             val tag = audio.tag
             val header = audio.audioHeader
             fun field(key: FieldKey): String? =
-                try { tag?.getFirst(key)?.takeIf { it.isNotBlank() } } catch (e: Exception) { null }
+                try { tag?.getFirst(key)?.takeIf { it.isNotBlank() }?.let(::fixEncoding) } catch (e: Exception) { null }
 
             Track(
                 id = id,
@@ -59,6 +59,25 @@ object LocalLibrary {
                 sourcePath = f.absolutePath,
             )
         }
+    }
+
+    private val CP1251 = charset("windows-1251")
+    private fun hasCyrillic(s: String) = s.any { it in 'Ѐ'..'ӿ' }
+
+    /**
+     * Чинит «кракозябры» в тегах. Многие русские mp3 хранят текст в UTF-8 или
+     * Windows-1251, но помечают его как ISO-8859-1 — тогда jaudiotagger выдаёт
+     * «Ð¡Ð¿...». Возвращаем исходные байты и декодируем правильно.
+     */
+    internal fun fixEncoding(s: String): String {
+        if (hasCyrillic(s) || s.none { it.code in 0x80..0xFF }) return s
+        if (s.any { it.code > 0xFF }) return s // не однобайтовая строка — не трогаем
+        val bytes = s.toByteArray(Charsets.ISO_8859_1)
+        val utf = String(bytes, Charsets.UTF_8)
+        if (!utf.contains('�') && hasCyrillic(utf)) return utf
+        val win = String(bytes, CP1251)
+        if (hasCyrillic(win)) return win
+        return s
     }
 
     /** Встроенная обложка файла в виде байтов, или null. */

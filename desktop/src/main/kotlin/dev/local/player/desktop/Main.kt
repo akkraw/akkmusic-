@@ -27,6 +27,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.loadImageBitmap
@@ -57,8 +61,21 @@ fun main() {
     try {
         application {
             val state = rememberWindowState(width = 1040.dp, height = 720.dp)
-            // undecorated: своя рамка и кнопки, без системной планки
-            Window(onCloseRequest = ::exitApplication, state = state, undecorated = true, title = "AkkMusic") {
+            // undecorated: своя рамка и кнопки, без системной планки.
+            // transparent — чтобы углы окна можно было скруглить.
+            // F11 — полноэкранный режим (отдельной кнопки больше нет).
+            Window(
+                onCloseRequest = ::exitApplication, state = state,
+                undecorated = true, transparent = true, title = "AkkMusic",
+                onPreviewKeyEvent = { e ->
+                    if (e.type == KeyEventType.KeyDown && e.key == Key.F11) {
+                        state.placement =
+                            if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating
+                            else WindowPlacement.Fullscreen
+                        true
+                    } else false
+                },
+            ) {
                 AppRoot(state, ::exitApplication)
             }
         }
@@ -132,7 +149,10 @@ private fun FrameWindowScope.AppRoot(windowState: WindowState, onExit: () -> Uni
     val bgImage = rememberFileImage(bgPath)
 
     AkkTheme(accentColor(accentKey), textColorOf(textKey), panelColor, Fonts.family(fontKey)) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // Скруглённые углы только в обычном окне; развёрнутое и полноэкранное — прямые
+        val windowed = windowState.placement == WindowPlacement.Floating
+        val windowShape = RoundedCornerShape(if (windowed) 14.dp else 0.dp)
+        Box(Modifier.fillMaxSize().clip(windowShape).background(MaterialTheme.colorScheme.background)) {
             if (bgImage != null) {
                 Image(
                     BitmapPainter(bgImage), null,
@@ -306,25 +326,14 @@ private fun FrameWindowScope.WindowChrome(
             IconButton(onClick = { windowState.isMinimized = true }) {
                 Icon(Icons.Default.Minimize, "Свернуть", tint = ctrl)
             }
-            // Развернуть на рабочую область (не залезает под панель задач)
+            // Одна кнопка: развернуть / вернуть окно (из полноэкранного тоже возвращает)
+            val expanded = windowState.placement != WindowPlacement.Floating
             IconButton(onClick = {
-                windowState.placement =
-                    if (windowState.placement == WindowPlacement.Maximized) WindowPlacement.Floating
-                    else WindowPlacement.Maximized
+                windowState.placement = if (expanded) WindowPlacement.Floating else WindowPlacement.Maximized
             }) {
                 Icon(
-                    if (windowState.placement == WindowPlacement.Maximized) Icons.Default.FilterNone else Icons.Default.CropSquare,
+                    if (expanded) Icons.Default.FilterNone else Icons.Default.CropSquare,
                     "Развернуть", tint = ctrl,
-                )
-            }
-            IconButton(onClick = {
-                windowState.placement =
-                    if (windowState.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating
-                    else WindowPlacement.Fullscreen
-            }) {
-                Icon(
-                    if (windowState.placement == WindowPlacement.Fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                    "Во весь экран", tint = ctrl,
                 )
             }
             IconButton(onClick = onExit) { Icon(Icons.Default.Close, "Закрыть", tint = ctrl) }
