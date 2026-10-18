@@ -401,7 +401,7 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium)
+                            color = accent, style = MaterialTheme.typography.titleMedium)
                         Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium)
@@ -411,7 +411,7 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
                     Icon(Icons.Default.Shuffle, "Перемешать",
                         tint = if (engine.shuffle) accent else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { engine.previous() }) { Icon(Icons.Default.SkipPrevious, "Назад") }
+                IconButton(onClick = { engine.previous() }) { Icon(Icons.Default.SkipPrevious, "Назад", tint = accent) }
                 FilledIconButton(
                     onClick = { engine.togglePlay() },
                     colors = IconButtonDefaults.filledIconButtonColors(
@@ -419,7 +419,7 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
                 ) {
                     Icon(if (engine.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Играть")
                 }
-                IconButton(onClick = { engine.next() }) { Icon(Icons.Default.SkipNext, "Вперёд") }
+                IconButton(onClick = { engine.next() }) { Icon(Icons.Default.SkipNext, "Вперёд", tint = accent) }
                 IconButton(onClick = { engine.cycleRepeat() }) {
                     Icon(
                         if (engine.repeat == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
@@ -431,12 +431,11 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(formatTime(if (dragging) dragValue.toLong() else pos),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Slider(
+                ThinSlider(
                     value = if (dragging) dragValue else pos.toFloat(),
                     onValueChange = { dragging = true; dragValue = it },
                     onValueChangeFinished = { engine.seekTo(dragValue.toLong()); dragging = false },
                     valueRange = 0f..(dur.coerceAtLeast(1).toFloat()),
-                    colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 )
                 Text(formatTime(dur), style = MaterialTheme.typography.labelSmall,
@@ -447,11 +446,10 @@ private fun PlayerBar(engine: PlayerEngine, track: Track, tick: Int, hasBg: Bool
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 12.dp).size(18.dp),
                 )
-                Slider(
+                ThinSlider(
                     value = volume,
                     onValueChange = { volume = it; engine.setVolume(it.toInt()) },
                     valueRange = 0f..100f,
-                    colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
                     modifier = Modifier.width(110.dp).padding(start = 6.dp),
                 )
             }

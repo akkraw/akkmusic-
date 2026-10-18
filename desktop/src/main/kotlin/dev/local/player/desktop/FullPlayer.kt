@@ -100,7 +100,7 @@ fun FullPlayer(engine: PlayerEngine, track: Track, tick: Int, onClose: () -> Uni
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.KeyboardArrowDown, "Свернуть")
+                    Icon(Icons.Default.KeyboardArrowDown, "Свернуть", tint = accent)
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
@@ -132,12 +132,11 @@ fun FullPlayer(engine: PlayerEngine, track: Track, tick: Int, onClose: () -> Uni
             }
 
             Spacer(Modifier.height(20.dp))
-            Slider(
+            ThinSlider(
                 value = if (dragging) dragValue else pos.toFloat(),
                 onValueChange = { dragging = true; dragValue = it },
                 onValueChangeFinished = { engine.seekTo(dragValue.toLong()); dragging = false },
                 valueRange = 0f..(dur.coerceAtLeast(1).toFloat()),
-                colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent),
                 modifier = Modifier.fillMaxWidth(0.7f),
             )
             Row(Modifier.fillMaxWidth(0.7f)) {
@@ -158,7 +157,7 @@ fun FullPlayer(engine: PlayerEngine, track: Track, tick: Int, onClose: () -> Uni
                         tint = if (engine.shuffle) accent else variant)
                 }
                 IconButton(onClick = { engine.previous() }, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Default.SkipPrevious, "Назад", modifier = Modifier.size(36.dp))
+                    Icon(Icons.Default.SkipPrevious, "Назад", tint = accent, modifier = Modifier.size(36.dp))
                 }
                 FilledIconButton(
                     onClick = { engine.togglePlay() },
@@ -173,7 +172,7 @@ fun FullPlayer(engine: PlayerEngine, track: Track, tick: Int, onClose: () -> Uni
                     )
                 }
                 IconButton(onClick = { engine.next() }, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Default.SkipNext, "Вперёд", modifier = Modifier.size(36.dp))
+                    Icon(Icons.Default.SkipNext, "Вперёд", tint = accent, modifier = Modifier.size(36.dp))
                 }
                 IconButton(onClick = { engine.cycleRepeat() }) {
                     Icon(
@@ -214,4 +213,35 @@ private fun CoverWithGlow(cover: ImageBitmap?, accent: Color) {
             }
         }
     }
+}
+
+/** Ползунок с тонкой и короткой «полоской»-ручкой вместо стандартной высокой. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ThinSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent)
+    val interaction = remember { MutableInteractionSource() }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        onValueChangeFinished = onValueChangeFinished,
+        colors = colors,
+        interactionSource = interaction,
+        valueRange = valueRange,
+        thumb = {
+            SliderDefaults.Thumb(
+                interactionSource = interaction,
+                colors = colors,
+                thumbSize = androidx.compose.ui.unit.DpSize(3.dp, 22.dp),
+            )
+        },
+    )
 }
