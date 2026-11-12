@@ -33,12 +33,32 @@ object Backdrop {
 
     fun has(ctx: Context): Boolean = sharpFile(ctx).exists() && blurFile(ctx).exists()
 
-    /** Возвращает (чёткая, размытая) или null, если фона нет. */
-    fun load(ctx: Context): Pair<Bitmap, Bitmap>? {
+    // Раскодированный фон живёт, пока жив процесс: при пересоздании экрана
+    // (смена цвета, поворот) картинку не читаем с диска заново.
+    @Volatile private var sharpCache: Bitmap? = null
+    @Volatile private var blurCache: Bitmap? = null
+
+    /** Маленькая размытая версия (160 px) — раскодируется мгновенно, можно на главном потоке. */
+    fun loadBlur(ctx: Context): Bitmap? {
         if (!has(ctx)) return null
-        val sharp = BitmapFactory.decodeFile(sharpFile(ctx).path) ?: return null
-        val blur = BitmapFactory.decodeFile(blurFile(ctx).path) ?: return null
-        return sharp to blur
+        blurCache?.let { return it }
+        return BitmapFactory.decodeFile(blurFile(ctx).path)?.also { blurCache = it }
+    }
+
+    /** Экран закрыт насовсем — память под фон больше не держим (музыка может играть дальше). */
+    fun releaseMemory() {
+        sharpCache = null
+        blurCache = null
+    }
+
+    /** Чёткая картинка, если она уже раскодирована. */
+    fun cachedSharp(): Bitmap? = sharpCache
+
+    /** Большая картинка — тяжёлая, вызывать не на главном потоке. */
+    fun loadSharp(ctx: Context): Bitmap? {
+        if (!has(ctx)) return null
+        sharpCache?.let { return it }
+        return BitmapFactory.decodeFile(sharpFile(ctx).path)?.also { sharpCache = it }
     }
 
     /** Тяжёлая работа — вызывать не на главном потоке. */
@@ -48,6 +68,8 @@ object Backdrop {
             val blurred = blur(src)
             writeAtomically(sharpFile(ctx)) { src.compress(Bitmap.CompressFormat.JPEG, 92, it) }
             writeAtomically(blurFile(ctx)) { blurred.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            sharpCache = src
+            blurCache = blurred
             true
         }
     } catch (e: Exception) {
@@ -57,6 +79,8 @@ object Backdrop {
     fun remove(ctx: Context) {
         sharpFile(ctx).delete()
         blurFile(ctx).delete()
+        sharpCache = null
+        blurCache = null
     }
 
     private fun writeAtomically(target: File, write: (java.io.OutputStream) -> Unit) {
@@ -176,13 +200,38 @@ class PanelDrawable(
 ) : Drawable() {
 
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    // Картинка рисуется шейдером сразу в скруглённый прямоугольник: без обрезки холста
+    // по контуру (clipPath), которая на каждом кадре обходится видеокарте дороже.
+    private val shader = blurred?.let {
+        android.graphics.BitmapShader(
+            it, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP
+        )
+    }
+    private var lastDx = Float.NaN
+    private var lastDy = Float.NaN
+    private var lastRw = 0
+    private var lastRh = 0
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val matrix = Matrix()
     private val hostLoc = IntArray(2)
     private val rootLoc = IntArray(2)
     private val rect = android.graphics.RectF()
-    private val clip = android.graphics.Path()
+
+    /**
+     * Вызывается после раскладки экрана: перерисовываем панель, только если она
+     * действительно сдвинулась относительно фона (а не на каждое изменение любого текста).
+     */
+    fun invalidateIfMoved() {
+        if (shader == null) return
+        host.getLocationInWindow(hostLoc)
+        root.getLocationInWindow(rootLoc)
+        val dx = hostLoc[0] - rootLoc[0] - host.translationX
+        val dy = hostLoc[1] - rootLoc[1] - host.translationY
+        if (dx != lastDx || dy != lastDy || root.width != lastRw || root.height != lastRh) {
+            invalidateSelf()
+        }
+    }
 
     var radius = 0f
         set(v) { field = v; invalidateSelf() }
@@ -201,19 +250,11 @@ class PanelDrawable(
 
     override fun draw(canvas: Canvas) {
         rect.set(bounds)
-        canvas.save()
-        if (radius > 0f) {
-            clip.reset()
-            clip.addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW)
-            canvas.clipPath(clip)
-        } else {
-            canvas.clipRect(bounds)
-        }
 
         val bmp = blurred
         val rw = root.width.toFloat()
         val rh = root.height.toFloat()
-        if (bmp != null && rw > 0f && rh > 0f) {
+        if (bmp != null && shader != null && rw > 0f && rh > 0f) {
             host.getLocationInWindow(hostLoc)
             root.getLocationInWindow(rootLoc)
             // Тот же centerCrop, что у картинки на весь экран, сдвинутый к позиции панели.
@@ -225,10 +266,15 @@ class PanelDrawable(
             val scale = max(rw / bw, rh / bh)
             matrix.setScale(scale, scale)
             matrix.postTranslate((rw - bw * scale) / 2f - dx, (rh - bh * scale) / 2f - dy)
-            canvas.drawBitmap(bmp, matrix, bitmapPaint)
+            shader.setLocalMatrix(matrix)
+            bitmapPaint.shader = shader
+            canvas.drawRoundRect(rect, radius, radius, bitmapPaint)
+            lastDx = dx
+            lastDy = dy
+            lastRw = root.width
+            lastRh = root.height
         }
-        canvas.drawRect(rect, fillPaint)
-        canvas.restore()
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
         if (strokePaint.strokeWidth > 0f && strokePaint.alpha > 0) {
             val h = strokePaint.strokeWidth / 2f

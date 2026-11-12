@@ -67,6 +67,70 @@ class ServerSettings(context: Context) {
 
 class ServerException(message: String) : Exception(message)
 
+/** Трек сервера «как пришёл» — без ссылок с токеном; в таком виде лежит в кеше на диске. */
+class RemoteSong(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationSec: Long,
+    val trackNo: Int,
+    val coverId: String,
+)
+
+/**
+ * Библиотека сервера с прошлого запуска: список появляется сразу,
+ * а свежий подтягивается следом. Привязана к адресу и логину.
+ */
+object ServerCache {
+
+    private fun file(ctx: Context) = java.io.File(ctx.cacheDir, "server_library.json")
+
+    fun owner(client: NavidromeClient): String = client.baseUrl + "|" + client.user
+
+    fun read(ctx: Context, client: NavidromeClient): List<Track>? = try {
+        val f = file(ctx)
+        if (!f.exists()) null else {
+            val root = JSONObject(f.readText())
+            if (root.optString("owner") != owner(client)) null else {
+                val arr = root.getJSONArray("songs")
+                List(arr.length()) { i ->
+                    val s = arr.getJSONArray(i)
+                    client.track(
+                        RemoteSong(
+                            id = s.getString(0), title = s.getString(1), artist = s.getString(2),
+                            album = s.getString(3), durationSec = s.getLong(4),
+                            trackNo = s.getInt(5), coverId = s.getString(6),
+                        )
+                    )
+                }
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    fun write(ctx: Context, client: NavidromeClient, songs: List<RemoteSong>) {
+        try {
+            val arr = org.json.JSONArray()
+            for (s in songs) {
+                arr.put(
+                    org.json.JSONArray()
+                        .put(s.id).put(s.title).put(s.artist).put(s.album)
+                        .put(s.durationSec).put(s.trackNo).put(s.coverId)
+                )
+            }
+            val text = JSONObject().put("owner", owner(client)).put("songs", arr).toString()
+            val f = file(ctx)
+            val tmp = java.io.File(f.parentFile, f.name + ".tmp")
+            tmp.writeText(text)
+            tmp.renameTo(f)
+        } catch (e: Exception) {
+            // кеш — только ускорение, без него всё работает
+        }
+    }
+}
+
 /**
  * Клиент Subsonic API (его реализует Navidrome). Сетевые вызовы — не на главном потоке.
  * Документация: https://opensubsonic.netlify.app/docs/
@@ -114,8 +178,8 @@ class NavidromeClient(
     }
 
     /** Все треки сервера. Пустой запрос search3 в Navidrome возвращает всю библиотеку. */
-    fun songs(): List<Track> {
-        val result = mutableListOf<Track>()
+    fun fetchSongs(): List<RemoteSong> {
+        val result = ArrayList<RemoteSong>()
         var offset = 0
         while (true) {
             val songs = call(
@@ -124,18 +188,14 @@ class NavidromeClient(
             ).optJSONObject("searchResult3")?.optJSONArray("song") ?: break
             for (i in 0 until songs.length()) {
                 val s = songs.getJSONObject(i)
-                val id = s.getString("id")
-                result += Track(
-                    id = localId(id),
-                    uri = Uri.parse(streamUrl(id)),
+                result += RemoteSong(
+                    id = s.getString("id"),
                     title = s.optString("title").ifBlank { "Без названия" },
                     artist = s.optString("artist").ifBlank { "Неизвестный исполнитель" },
                     album = s.optString("album").ifBlank { "Неизвестный альбом" },
-                    albumId = 0,
-                    durationMs = s.optLong("duration") * 1000,
+                    durationSec = s.optLong("duration"),
                     trackNo = s.optInt("discNumber") * 1000 + s.optInt("track"),
-                    remoteCoverUrl = s.optString("coverArt").takeIf { it.isNotEmpty() }
-                        ?.let { coverUrl(it) },
+                    coverId = s.optString("coverArt"),
                 )
             }
             if (songs.length() < PAGE) break
@@ -143,6 +203,19 @@ class NavidromeClient(
         }
         return result
     }
+
+    /** Трек приложения из трека сервера: ссылки на поток и обложку — с данными этого клиента. */
+    fun track(s: RemoteSong): Track = Track(
+        id = localId(s.id),
+        uri = Uri.parse(streamUrl(s.id)),
+        title = s.title,
+        artist = s.artist,
+        album = s.album,
+        albumId = 0,
+        durationMs = s.durationSec * 1000,
+        trackNo = s.trackNo,
+        remoteCoverUrl = s.coverId.takeIf { it.isNotEmpty() }?.let { coverUrl(it) },
+    )
 
     /** Ссылка на поток: ExoPlayer играет её как обычный HTTP-файл (перемотка тоже работает). */
     fun streamUrl(id: String): String = "$baseUrl/rest/stream?id=${enc(id)}&$auth"
@@ -157,17 +230,19 @@ class NavidromeClient(
         } catch (e: Exception) {
             throw ServerException("Неверный адрес сервера")
         }
+        // После удачного ответа соединение не рвём: следующая страница библиотеки
+        // уйдёт по нему же, без нового TLS-рукопожатия. Рвём только при ошибке.
         val body = try {
             conn.connectTimeout = 10_000
             conn.readTimeout = 30_000
             if (conn.responseCode != 200) throw ServerException("Сервер ответил ${conn.responseCode}")
             conn.inputStream.bufferedReader().use { it.readText() }
         } catch (e: ServerException) {
+            conn.disconnect()
             throw e
         } catch (e: Exception) {
-            throw ServerException("Сервер недоступен: ${e.message ?: e.javaClass.simpleName}")
-        } finally {
             conn.disconnect()
+            throw ServerException("Сервер недоступен: ${e.message ?: e.javaClass.simpleName}")
         }
         val resp = try {
             JSONObject(body).getJSONObject("subsonic-response")

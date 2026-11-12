@@ -11,6 +11,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -27,6 +28,27 @@ import com.google.common.util.concurrent.ListenableFuture
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+
+    // Wi-Fi держим включённым, только если в очереди есть треки с сервера:
+    // для музыки с телефона это лишний расход батареи.
+    private var exoPlayer: ExoPlayer? = null
+    private var networkWake = false
+
+    private fun updateWakeMode() {
+        val player = exoPlayer ?: return
+        var remote = false
+        for (i in 0 until player.mediaItemCount) {
+            val scheme = player.getMediaItemAt(i).localConfiguration?.uri?.scheme
+            if (scheme == "http" || scheme == "https") {
+                remote = true
+                break
+            }
+        }
+        if (remote != networkWake) {
+            networkWake = remote
+            player.setWakeMode(if (remote) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
+        }
+    }
 
     // ---------- Подсчёт прослушиваний ----------
     private lateinit var playCounts: PlayCounts
@@ -97,6 +119,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val countingListener = object : Player.Listener {
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) updateWakeMode()
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             // Новый трек (или тот же на повторе) — начинаем считать заново
             playedMs = 0
@@ -154,10 +180,11 @@ class PlaybackService : MediaSessionService() {
             )
             // Пауза, когда отключаются наушники
             .setHandleAudioBecomingNoisy(true)
-            // Не даём процессору и Wi-Fi уснуть посреди трека при выключенном экране
-            // (Wi-Fi нужен для музыки с сервера)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
+            // Не даём процессору уснуть посреди трека при выключенном экране.
+            // Если в очереди появляется музыка с сервера, updateWakeMode() добавляет Wi-Fi.
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        exoPlayer = player
 
         playCounts = PlayCounts(this)
         player.addListener(countingListener)
@@ -201,6 +228,7 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        exoPlayer = null
         super.onDestroy()
     }
 

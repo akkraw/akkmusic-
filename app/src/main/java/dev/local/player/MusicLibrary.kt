@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import androidx.media3.common.MediaItem
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaMetadata
+import java.text.CollationKey
 import java.text.Collator
 import java.util.Locale
 
@@ -29,6 +30,24 @@ data class Track(
     val remoteCoverUrl: String? = null,
 ) {
     val renamed: Boolean get() = title != originalTitle
+
+    /** Вторая строка в списке — собирается один раз, а не при каждой прокрутке. */
+    val subtitle: String by lazy(LazyThreadSafetyMode.NONE) { "$artist · $album" }
+
+    /**
+     * Всё, по чему ищем, одной строкой: нижний регистр, «ё» = «е».
+     * Считается один раз на трек, а не на каждую набранную букву.
+     */
+    val searchKey: String by lazy(LazyThreadSafetyMode.NONE) {
+        val sb = StringBuilder(title.length + artist.length + album.length + 3)
+        sb.append(title).append('\n')
+        if (renamed) sb.append(originalTitle).append('\n')
+        sb.append(artist).append('\n').append(album)
+        sb.toString().lowercase().replace('ё', 'е')
+    }
+
+    /** Ключ сортировки по названию (см. TrackSorter) — тоже считается один раз. */
+    val titleSortKey: CollationKey by lazy(LazyThreadSafetyMode.NONE) { TrackSorter.titleKey(title) }
 
     /** Трек с сервера Navidrome (id отрицательные, см. NavidromeClient.localId). */
     val isRemote: Boolean get() = id < 0
@@ -80,41 +99,113 @@ object MusicLibrary {
      */
     class Result(val shown: List<Track>, val all: List<Track>)
 
-    fun load(context: Context, edits: TrackEdits? = null): Result {
+    // Списки «как есть» (без скрытия и переименований), чтобы после правки трека
+    // не перечитывать медиатеку и не качать заново всю библиотеку сервера.
+    private var rawLocal: List<Track>? = null
+    private var rawRemote: List<Track>? = null
+    private var rawRemoteOwner: String? = null // чей это список: адрес сервера + логин
+
+    /**
+     * [refresh] = false — пересобрать список из уже загруженного (после переименования,
+     * скрытия или возврата трека): без запроса к MediaStore и к серверу.
+     */
+    @Synchronized
+    fun load(
+        context: Context,
+        edits: TrackEdits? = null,
+        refresh: Boolean = true,
+        refreshLocal: Boolean = refresh,
+    ): Result {
         val settings = ServerSettings(context)
         val source = settings.source
-        val local = if (hasAudioPermission(context)) loadLocal(context, edits) else emptyList()
+        val local = localTracks(context, refreshLocal)
 
-        serverError = null
-        if (!source.usesServer) return Result(local, local)
-        val remote = settings.client()?.let { client ->
-            try {
-                applyEdits(client.songs(), edits)
-            } catch (e: ServerException) {
-                serverError = e.message
-                emptyList()
-            }
-        } ?: run {
+        if (!source.usesServer) {
+            serverError = null
+            return applyEdits(local, edits).let { Result(it, it) }
+        }
+        val remote = rawRemote?.takeUnless { refresh } ?: fetchRemote(context, settings)
+        return merged(source, local, remote, edits)
+    }
+
+    /**
+     * Мгновенный список до ответа сервера: телефон + библиотека сервера с прошлого раза
+     * (из памяти или с диска). null — показывать пока нечего, ждём [load].
+     */
+    @Synchronized
+    fun loadCached(context: Context, edits: TrackEdits? = null): Result? {
+        val settings = ServerSettings(context)
+        val source = settings.source
+        if (!source.usesServer) return null
+        val client = settings.client() ?: return null
+        val remote = rawRemote?.takeIf { serverError == null && rawRemoteOwner == ServerCache.owner(client) }
+            ?: ServerCache.read(context, client)
+            ?: return null
+        return merged(source, localTracks(context, refresh = true), remote, edits)
+    }
+
+    private fun localTracks(context: Context, refresh: Boolean): List<Track> {
+        if (!hasAudioPermission(context)) return emptyList()
+        return rawLocal?.takeUnless { refresh } ?: loadLocal(context).also { rawLocal = it }
+    }
+
+    private fun fetchRemote(context: Context, settings: ServerSettings): List<Track> {
+        val client = settings.client()
+        val tracks: List<Track> = if (client == null) {
             serverError = "Сервер не подключён"
             emptyList()
+        } else try {
+            val songs = client.fetchSongs()
+            serverError = null
+            ServerCache.write(context, client, songs)
+            songs.map(client::track)
+        } catch (e: ServerException) {
+            serverError = e.message
+            emptyList()
         }
+        rawRemote = tracks
+        rawRemoteOwner = client?.let { ServerCache.owner(it) }
+        return tracks
+    }
+
+    private fun merged(
+        source: LibrarySource, local: List<Track>, remote: List<Track>, edits: TrackEdits?,
+    ): Result {
         // Общий список: исполнитель → альбом → номер трека, как у локальной медиатеки
-        val all = sortByArtist(local + remote)
+        val all = sortByArtist(applyEdits(local + remote, edits))
         return Result(if (source.usesPhone) all else all.filter { it.isRemote }, all)
     }
 
-    private fun sortByArtist(tracks: List<Track>): List<Track> = tracks.sortedWith(
-        Comparator<Track> { a, b -> collator.compare(a.artist, b.artist) }
-            .then { a, b -> collator.compare(a.album, b.album) }
-            .thenBy { it.trackNo }
-    )
+    /**
+     * Ключи сравнения считаем один раз на строку (исполнителей и альбомов намного меньше,
+     * чем треков), дальше сортировка сравнивает готовые байты — в разы быстрее,
+     * чем Collator.compare на каждой паре.
+     */
+    private fun sortByArtist(tracks: List<Track>): List<Track> {
+        class Row(val track: Track, val artist: CollationKey, val album: CollationKey)
+
+        val keys = HashMap<String, CollationKey>()
+        fun key(s: String) = keys.getOrPut(s) { collator.getCollationKey(s) }
+        val rows = tracks.map { Row(it, key(it.artist), key(it.album)) }
+        return rows.sortedWith(
+            Comparator<Row> { a, b -> a.artist.compareTo(b.artist) }
+                .then { a, b -> a.album.compareTo(b.album) }
+                .thenBy { it.track.trackNo }
+        ).map { it.track }
+    }
 
     private fun applyEdits(tracks: List<Track>, edits: TrackEdits?): List<Track> {
         if (edits == null) return tracks
         val hidden = edits.hiddenIds()
         val overrides = edits.overrides()
-        return tracks.filter { it.id !in hidden }
-            .map { t -> overrides[t.id]?.let { t.copy(title = it) } ?: t }
+        if (hidden.isEmpty() && overrides.isEmpty()) return tracks
+        val out = ArrayList<Track>(tracks.size)
+        for (t in tracks) {
+            if (t.id in hidden) continue // «удалённые» из приложения не показываем
+            val title = overrides[t.id]
+            out += if (title != null && title != t.title) t.copy(title = title) else t
+        }
+        return out
     }
 
     fun hasAudioPermission(context: Context): Boolean {
@@ -126,9 +217,7 @@ object MusicLibrary {
         return ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun loadLocal(context: Context, edits: TrackEdits?): List<Track> {
-        val hidden = edits?.hiddenIds() ?: emptySet()
-        val overrides = edits?.overrides() ?: emptyMap()
+    private fun loadLocal(context: Context): List<Track> {
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         } else {
@@ -149,7 +238,7 @@ object MusicLibrary {
             "${MediaStore.Audio.Media.ALBUM} COLLATE NOCASE, " +
             MediaStore.Audio.Media.TRACK
 
-        val tracks = mutableListOf<Track>()
+        val tracks = ArrayList<Track>()
         context.contentResolver.query(collection, projection, selection, null, sortOrder)
             ?.use { c ->
                 val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
@@ -162,14 +251,13 @@ object MusicLibrary {
 
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
-                    if (id in hidden) continue // «удалённые» из приложения не показываем
                     val original = c.getString(titleCol).orUnknown("Без названия")
                     tracks += Track(
                         id = id,
                         uri = ContentUris.withAppendedId(
                             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
                         ),
-                        title = overrides[id] ?: original,
+                        title = original,
                         artist = c.getString(artistCol).orUnknown("Неизвестный исполнитель"),
                         album = c.getString(albumCol).orUnknown("Неизвестный альбом"),
                         albumId = c.getLong(albumIdCol),

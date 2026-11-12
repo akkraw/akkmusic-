@@ -15,6 +15,8 @@ android {
         // ставилось поверх), а versionName считает сама сборка: Beta 0.9.x.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = System.getenv("VERSION_NAME") ?: "dev"
+        // Строки библиотек на десятках языков приложению не нужны — оставляем два
+        resourceConfigurations += listOf("ru", "en")
     }
 
     // Один и тот же ключ подписи для всех сборок (и локальных, и на GitHub),
@@ -30,7 +32,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: выкидывает неиспользуемый код и ресурсы библиотек и оптимизирует остальное —
+            // APK в разы меньше, приложение запускается быстрее
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -60,4 +69,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.google.android.material:material:1.12.0")
+    // Ставит профили запуска библиотек (ART заранее компилирует «горячий» код)
+    // и для APK, установленного не из магазина
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 }

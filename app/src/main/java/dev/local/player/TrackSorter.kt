@@ -1,5 +1,6 @@
 package dev.local.player
 
+import java.text.CollationKey
 import java.text.Collator
 import java.util.Locale
 
@@ -40,8 +41,11 @@ object TrackSorter {
     /** Названия без первого «мусорного» символа: «(Intro)» и «"Кукушка"» сортируются по буквам. */
     private fun key(title: String): String = title.trimStart { !it.isLetterOrDigit() }
 
+    /** Готовый ключ сравнения названия: считается один раз на трек (Track.titleSortKey). */
+    fun titleKey(title: String): CollationKey = collator.getCollationKey(key(title))
+
     fun sort(tracks: List<Track>, sort: TrackSort, playCounts: Map<Long, Int>): List<Track> {
-        val byTitle = Comparator<Track> { a, b -> collator.compare(key(a.title), key(b.title)) }
+        val byTitle = Comparator<Track> { a, b -> a.titleSortKey.compareTo(b.titleSortKey) }
         return when (sort) {
             // Библиотека уже приходит отсортированной по исполнителю/альбому
             TrackSort.ARTIST -> tracks

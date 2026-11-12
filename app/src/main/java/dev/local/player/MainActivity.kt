@@ -59,6 +59,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -117,7 +118,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fpRepeat: ImageButton
     private var fullOpen = false
     private var pendingOpenFull = false
-    private var fpLoadedId: String? = null
+    @Volatile private var fpLoadedId: String? = null
     private var fpSeeking = false
     private var fpCoverScale = 1f
     private var placeholderGlow: Bitmap? = null
@@ -202,11 +203,34 @@ class MainActivity : AppCompatActivity() {
     // чтобы список не прыгал во время прослушивания)
     private val countsListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            trackAdapter.setPlayCounts(playCounts.all())
+            countsCache = null
+            trackAdapter.setPlayCounts(counts())
         }
     private var library: List<Track> = emptyList()
+    private var libraryAll: List<Track> = emptyList()
     private var trackById: Map<Long, Track> = emptyMap()
     private var libraryLoaded = false
+
+    // Счётчики прослушиваний читаем из настроек один раз, а не на каждую отрисовку
+    private var countsCache: Map<Long, Int>? = null
+    private fun counts(): Map<Long, Int> = countsCache ?: playCounts.all().also { countsCache = it }
+
+    // Отсортированная библиотека: пока не сменились треки или сортировка,
+    // поиск только фильтрует готовый список и не сортирует его на каждую букву
+    private var sortedSource: List<Track>? = null
+    private var sortedBy: TrackSort? = null
+    private var sortedList: List<Track> = emptyList()
+
+    private fun sortedLibrary(counts: Map<Long, Int>): List<Track> {
+        // «Чаще слушаемые» зависят от счётчиков — их пересчитываем всегда
+        if (trackSort == TrackSort.MOST_PLAYED) return TrackSorter.sort(library, trackSort, counts)
+        if (sortedSource !== library || sortedBy != trackSort) {
+            sortedList = TrackSorter.sort(library, trackSort, counts)
+            sortedSource = library
+            sortedBy = trackSort
+        }
+        return sortedList
+    }
 
     private var screen = Screen.TRACKS
     private var openPlaylistId: Long = -1
@@ -265,8 +289,19 @@ class MainActivity : AppCompatActivity() {
     private val ioExecutor = Executors.newSingleThreadExecutor()
     // Пинг отдельно, чтобы медленный сервер не задерживал загрузку медиатеки
     private val pingExecutor = Executors.newSingleThreadExecutor()
+    // Обложки и фон — тоже отдельно: не ждут, пока загрузится библиотека с сервера
+    private val coverExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private var userSeeking = false
+
+    // Что сейчас написано на экране — чтобы не переписывать тот же текст дважды в секунду
+    // (каждая запись в текст заставляет Android заново раскладывать экран)
+    private var shownDur = -1L
+    private var shownPosSec = -1L
+    private var fpShownDur = -1L
+    private var fpShownPosSec = -1L
+    private var shownSleep: String? = SLEEP_UNSET
+    private var ticking = false
 
     // Системный выбор фото: разрешения на доступ к галерее не нужны
     private val pickCover =
@@ -308,8 +343,21 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             updateProgress()
             if (fullOpen) updateSleepLabel()
-            handler.postDelayed(this, 500)
+            if (needsTick()) handler.postDelayed(this, 500) else ticking = false
         }
+    }
+
+    /** Обновлять полосу времени нужно, только пока музыка играет (или тикает таймер сна). */
+    private fun needsTick(): Boolean {
+        val c = controller ?: return false
+        return c.isPlaying || (fullOpen && sleepAt() != null)
+    }
+
+    /** На паузе таймер обновления не крутится вообще; запускается снова по событию плеера. */
+    private fun ensureTicking() {
+        if (ticking || !needsTick()) return
+        ticking = true
+        handler.postDelayed(progressTick, 500)
     }
 
     private val playerListener = object : Player.Listener {
@@ -359,11 +407,21 @@ class MainActivity : AppCompatActivity() {
         showHeader = uiPrefs.getBoolean(KEY_HEADER, true)
         roundedStyle = uiPrefs.getBoolean(KEY_ROUNDED, true)
         bindViews()
-        Backdrop.load(this)?.let { (sharp, blur) ->
-            bgSharp = sharp
-            bgBlur = blur
-        }
+        // Маленькая размытая версия фона готова сразу; большую картинку раскодируем
+        // в фоне (а при пересоздании экрана берём уже готовую из памяти)
+        bgBlur = Backdrop.loadBlur(this)
+        bgSharp = Backdrop.cachedSharp()
         applyBackground()
+        if (bgBlur != null && bgSharp == null) {
+            coverExecutor.execute {
+                val sharp = Backdrop.loadSharp(applicationContext)
+                runOnUiThread {
+                    if (isDestroyed || sharp == null || bgBlur == null) return@runOnUiThread
+                    bgSharp = sharp
+                    bgImage.setImageBitmap(sharp)
+                }
+            }
+        }
         setupInsets()
         applyStyle()
         onBackPressedDispatcher.addCallback(this, backCallback)
@@ -419,13 +477,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }, MoreExecutors.directExecutor())
-        handler.post(progressTick)
         playCounts.prefs.registerOnSharedPreferenceChangeListener(countsListener)
-        trackAdapter.setPlayCounts(playCounts.all())
+        // Пока экран был скрыт, сервис мог засчитать прослушивания
+        countsCache = null
+        trackAdapter.setPlayCounts(counts())
     }
 
     override fun onStop() {
         handler.removeCallbacks(progressTick)
+        ticking = false
         playCounts.prefs.unregisterOnSharedPreferenceChangeListener(countsListener)
         controller?.removeListener(playerListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
@@ -436,6 +496,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         ioExecutor.shutdown()
         pingExecutor.shutdownNow()
+        coverExecutor.shutdown()
+        if (isFinishing) Backdrop.releaseMemory()
         super.onDestroy()
     }
 
@@ -468,17 +530,37 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadLibrary() {
         ioExecutor.execute {
-            val loaded = MusicLibrary.load(applicationContext, trackEdits)
+            val ctx = applicationContext
+            // Сначала — то, что есть сразу: телефон + библиотека сервера с прошлого раза.
+            // Свежий ответ сервера придёт следом и заменит список, если что-то изменилось.
+            val cached = MusicLibrary.loadCached(ctx, trackEdits)
+            if (cached != null) {
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    applyLibrary(cached)
+                    updatePlayerUi()
+                }
+            }
+            val loaded = MusicLibrary.load(ctx, trackEdits, refreshLocal = cached == null)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                library = loaded.shown
-                trackById = loaded.all.associateBy { it.id }
-                libraryLoaded = true
-                render()
+                applyLibrary(loaded)
                 updatePlayerUi()
                 showServerError()
             }
         }
+    }
+
+    /** Принимает загруженную библиотеку; если она не изменилась — экран не трогаем. */
+    private fun applyLibrary(loaded: MusicLibrary.Result) {
+        if (libraryLoaded && loaded.all.isNotEmpty() &&
+            loaded.shown == library && loaded.all == libraryAll
+        ) return
+        library = loaded.shown
+        libraryAll = loaded.all
+        trackById = loaded.all.associateBy { it.id }
+        libraryLoaded = true
+        render()
     }
 
     // ---------- Навигация и отрисовка экрана ----------
@@ -636,8 +718,7 @@ class MainActivity : AppCompatActivity() {
         backBtn.visibility = if (screen == Screen.PLAYLIST) View.VISIBLE else View.GONE
         headerCover.visibility = View.GONE
         updateChrome()
-        val counts = playCounts.all()
-        trackAdapter.setPlayCounts(counts)
+        val counts = counts()
 
         var emptyMessage: Int? = null
         grantButton.visibility = View.GONE
@@ -645,7 +726,7 @@ class MainActivity : AppCompatActivity() {
         when (screen) {
             Screen.TRACKS -> {
                 screenTitle.setText(R.string.app_name)
-                val shown = filterTracks(TrackSorter.sort(library, trackSort, counts), searchQuery)
+                val shown = filterTracks(sortedLibrary(counts), searchQuery)
                 countText.text = when {
                     !libraryLoaded -> ""
                     searchQuery.isNotBlank() -> getString(R.string.search_found, shown.size)
@@ -653,8 +734,8 @@ class MainActivity : AppCompatActivity() {
                         " · " + getString(sortLabel(trackSort)).replaceFirstChar { it.lowercase() }
                 }
                 actionsRow.visibility = View.GONE
-                list.adapter = trackAdapter
-                trackAdapter.submit(shown)
+                setListAdapter(trackAdapter)
+                trackAdapter.submit(shown, counts)
                 when {
                     serverSettings.source == LibrarySource.PHONE && !hasAudioPermission() -> {
                         emptyMessage = R.string.need_permission
@@ -676,7 +757,7 @@ class MainActivity : AppCompatActivity() {
                 countText.text =
                     resources.getQuantityString(R.plurals.playlist_count, all.size, all.size)
                 actionsRow.visibility = View.GONE
-                list.adapter = playlistAdapter
+                setListAdapter(playlistAdapter)
                 playlistAdapter.submit(all)
                 if (all.isEmpty()) emptyMessage = R.string.no_playlists
             }
@@ -698,8 +779,8 @@ class MainActivity : AppCompatActivity() {
                 actionsRow.visibility = View.VISIBLE
                 playAllBtn.isEnabled = tracks.isNotEmpty()
                 shuffleAllBtn.isEnabled = tracks.isNotEmpty()
-                list.adapter = trackAdapter
-                trackAdapter.submit(tracks, dragHandles = true)
+                setListAdapter(trackAdapter)
+                trackAdapter.submit(tracks, counts, dragHandles = true)
                 if (libraryLoaded && tracks.isEmpty()) emptyMessage = R.string.playlist_empty
             }
         }
@@ -712,6 +793,14 @@ class MainActivity : AppCompatActivity() {
             emptyView.visibility = View.GONE
             list.visibility = View.VISIBLE
         }
+    }
+
+    /**
+     * Адаптер меняем, только когда он действительно другой: повторная установка того же
+     * заставляла список выбрасывать и заново создавать все строки на каждую отрисовку.
+     */
+    private fun setListAdapter(adapter: RecyclerView.Adapter<*>) {
+        if (list.adapter !== adapter) list.adapter = adapter
     }
 
     // ---------- Панели: стиль, отступы, фон ----------
@@ -756,10 +845,7 @@ class MainActivity : AppCompatActivity() {
     private fun filterTracks(list: List<Track>, query: String): List<Track> {
         val q = norm(query.trim())
         if (q.isEmpty()) return list
-        return list.filter {
-            norm(it.title).contains(q) || norm(it.originalTitle).contains(q) ||
-                norm(it.artist).contains(q) || norm(it.album).contains(q)
-        }
+        return list.filter { it.searchKey.contains(q) }
     }
 
     /** Одно состояние поиска на два поля (в шапке и в верхней строке). */
@@ -784,6 +870,7 @@ class MainActivity : AppCompatActivity() {
         headerSearchInput.clearFocus()
         setQuery("", null, refresh = false)
         render()
+        list.scrollToPosition(0)
     }
 
     private fun showKeyboard(v: View) {
@@ -884,11 +971,11 @@ class MainActivity : AppCompatActivity() {
     private fun bgDim(): Int = (uiPrefs.getInt(KEY_BG_DIM, 50) / 5 * 5).coerceIn(0, 90)
 
     private fun applyBackground() {
-        val sharp = bgSharp
         val blur = bgBlur
-        val hasBg = sharp != null && blur != null
+        val hasBg = blur != null
         if (hasBg) {
-            bgImage.setImageBitmap(sharp)
+            // Пока большая картинка раскодируется, показываем размытую — она той же формы
+            bgImage.setImageBitmap(bgSharp ?: blur)
             bgImage.visibility = View.VISIBLE
             bgScrim.visibility = View.VISIBLE
         } else {
@@ -900,7 +987,7 @@ class MainActivity : AppCompatActivity() {
         }
         // Панели могут сдвинуться (появился плеер) — перерисовываем кусок фона под ними
         appRoot.viewTreeObserver.addOnGlobalLayoutListener {
-            panelDrawables.forEach { it.invalidateSelf() }
+            panelDrawables.forEach { it.invalidateIfMoved() }
         }
         updateDim(bgDim())
     }
@@ -940,7 +1027,7 @@ class MainActivity : AppCompatActivity() {
         val dimBlock = v.findViewById<View>(R.id.bgDimBlock)
         val slider = v.findViewById<Slider>(R.id.bgDimSlider)
         val removedBtn = v.findViewById<Button>(R.id.removedTracksBtn)
-        val hasBg = bgSharp != null
+        val hasBg = bgBlur != null
         v.setPadding(0, 0, 0, insetB)
 
         // Источник музыки: телефон / сервер / всё вместе
@@ -1321,12 +1408,11 @@ class MainActivity : AppCompatActivity() {
     private fun reloadLibrary() {
         if (!libraryLoaded) return
         ioExecutor.execute {
-            val loaded = MusicLibrary.load(applicationContext, trackEdits)
+            // Правки накладываем на уже загруженные списки: ни MediaStore, ни сервер не дёргаем
+            val loaded = MusicLibrary.load(applicationContext, trackEdits, refresh = false)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                library = loaded.shown
-                trackById = loaded.all.associateBy { it.id }
-                render()
+                applyLibrary(loaded)
             }
         }
     }
@@ -1489,6 +1575,7 @@ class MainActivity : AppCompatActivity() {
         repeatBtn = findViewById(R.id.repeatBtn)
 
         list.layoutManager = LinearLayoutManager(this)
+        list.setHasFixedSize(true)
         list.adapter = trackAdapter
         touchHelper.attachToRecyclerView(list)
         // Поиск
@@ -1549,7 +1636,10 @@ class MainActivity : AppCompatActivity() {
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) posText.text = formatTime(progress.toLong())
+                if (fromUser) {
+                    posText.text = formatTime(progress.toLong())
+                    shownPosSec = -1
+                }
             }
 
             override fun onStartTrackingTouch(sb: SeekBar) {
@@ -1585,24 +1675,40 @@ class MainActivity : AppCompatActivity() {
         applyModeButtons(shuffleBtn, repeatBtn, c, accent = false)
         updateFullPlayer()
         updateProgress()
+        ensureTicking()
     }
 
     private fun updateProgress() {
         val c = controller ?: return
         if (c.currentMediaItem == null) return
         val duration = c.duration.takeIf { it > 0 } ?: 0L
+        val position = c.currentPosition
+        val posSec = position / 1000
+        // Ползунок двигаем каждый раз, а текст переписываем, только когда сменилась секунда
         seekBar.max = duration.toInt()
-        durText.text = formatTime(duration)
+        if (duration != shownDur) {
+            shownDur = duration
+            durText.text = formatTime(duration)
+        }
         if (!userSeeking) {
-            seekBar.progress = c.currentPosition.toInt()
-            posText.text = formatTime(c.currentPosition)
+            seekBar.progress = position.toInt()
+            if (posSec != shownPosSec) {
+                shownPosSec = posSec
+                posText.text = formatTime(position)
+            }
         }
         if (fullOpen) {
             fpSeek.max = duration.toInt()
-            fpDur.text = formatTime(duration)
+            if (duration != fpShownDur) {
+                fpShownDur = duration
+                fpDur.text = formatTime(duration)
+            }
             if (!fpSeeking) {
-                fpSeek.progress = c.currentPosition.toInt()
-                fpPos.text = formatTime(c.currentPosition)
+                fpSeek.progress = position.toInt()
+                if (posSec != fpShownPosSec) {
+                    fpShownPosSec = posSec
+                    fpPos.text = formatTime(position)
+                }
             }
         }
     }
@@ -1709,7 +1815,10 @@ class MainActivity : AppCompatActivity() {
 
         fpSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) fpPos.text = formatTime(progress.toLong())
+                if (fromUser) {
+                    fpPos.text = formatTime(progress.toLong())
+                    fpShownPosSec = -1
+                }
             }
             override fun onStartTrackingTouch(sb: SeekBar) { fpSeeking = true }
             override fun onStopTrackingTouch(sb: SeekBar) {
@@ -1742,9 +1851,12 @@ class MainActivity : AppCompatActivity() {
         hideKeyboard()
         fullPlayer.visibility = View.VISIBLE
         fullPlayer.animate().cancel()
+        fpShownDur = -1
+        fpShownPosSec = -1
         updateFullPlayer()
         updateProgress()
         updateSleepLabel()
+        ensureTicking()
         if (animate) {
             fullPlayer.translationY = appRoot.height.toFloat().takeIf { it > 0f } ?: 2000f
             fullPlayer.animate().translationY(0f).setDuration(340).setInterpolator(easing).start()
@@ -1793,22 +1905,41 @@ class MainActivity : AppCompatActivity() {
 
         if (item.mediaId != fpLoadedId) {
             fpLoadedId = item.mediaId
-            loadCover(item.mediaId)
+            loadCover(item)
         }
     }
 
-    private fun loadCover(mediaId: String) {
+    /**
+     * Обложка текущего трека. Адрес берём из самого трека в очереди (а не из библиотеки),
+     * поэтому она находится, даже если библиотека ещё не загрузилась.
+     */
+    private fun loadCover(item: MediaItem) {
+        val mediaId = item.mediaId
         val id = mediaId.toLongOrNull() ?: return
-        val track = trackById[id]
-        ioExecutor.execute {
-            val art = track?.remoteCoverUrl?.let { CoverArt.loadUrl(it) }
-                ?: if (track?.isRemote == true) null
-                else CoverArt.load(applicationContext, id, track?.albumId)
-            val glow = art?.let { Backdrop.glow(it) }
-            val back = art?.let { Backdrop.blurForBackdrop(it) }
+        val artUri = item.mediaMetadata.artworkUri
+        val scheme = artUri?.scheme
+        val remoteUrl = if (scheme == "http" || scheme == "https") artUri?.toString() else null
+        val albumId = if (remoteUrl == null) artUri?.lastPathSegment?.toLongOrNull() else null
+        val key = remoteUrl ?: "local:$id"
+
+        // Недавняя обложка уже готова в памяти — показываем сразу
+        CoverArt.cached(key)?.let {
+            applyCover(it.art, it.glow, it.back)
+            return
+        }
+        coverExecutor.execute {
+            // Пока задача ждала очереди, трек уже переключили — не тратим время и трафик
+            if (fpLoadedId != mediaId) return@execute
+            val art = when {
+                remoteUrl != null -> CoverArt.loadUrl(applicationContext, remoteUrl)
+                id < 0 -> null
+                else -> CoverArt.load(applicationContext, id, albumId)
+            }
+            val cover = art?.let { CoverArt.Cover(it, Backdrop.glow(it), Backdrop.blurForBackdrop(it)) }
+            if (cover != null) CoverArt.remember(key, cover)
             runOnUiThread {
                 if (isDestroyed || fpLoadedId != mediaId) return@runOnUiThread
-                applyCover(art, glow, back)
+                applyCover(cover?.art, cover?.glow, cover?.back)
             }
         }
     }
@@ -1879,6 +2010,8 @@ class MainActivity : AppCompatActivity() {
                 "${ceil((at - System.currentTimeMillis()) / 60_000.0).toInt()} мин"
             else -> null
         }
+        if (left == shownSleep) return // подпись не изменилась — ничего не перерисовываем
+        shownSleep = left
         fpSleepLeft.text = left ?: ""
         fpSleepLeft.visibility = if (left == null) View.GONE else View.VISIBLE
         fpSleepIcon.imageTintList = ColorStateList.valueOf(
@@ -1907,13 +2040,17 @@ class MainActivity : AppCompatActivity() {
                     minutes > 0 -> Toast.makeText(this, getString(R.string.sleep_set, minutes), Toast.LENGTH_SHORT).show()
                     minutes == 0 -> Toast.makeText(this, R.string.sleep_set_end, Toast.LENGTH_SHORT).show()
                 }
-                fpSleep.postDelayed({ updateSleepLabel() }, 300)
+                fpSleep.postDelayed({
+                    updateSleepLabel()
+                    ensureTicking()
+                }, 300)
             }
             .show()
     }
 
     companion object {
         private const val PING_INTERVAL_MS = 5_000L
+        private const val SLEEP_UNSET = "\u0000"
         private const val KEY_SCREEN = "screen"
         private const val KEY_PLAYLIST = "playlist"
         private const val KEY_SORT = "track_sort"
